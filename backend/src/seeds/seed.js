@@ -28,21 +28,22 @@ async function seed() {
     console.log('Cleared existing data.');
   }
 
-  const hash = await bcrypt.hash('password123', 10);
+  const defaultHash = await bcrypt.hash('password123', 10);
+  const adminHash = await bcrypt.hash('123', 10);
 
   // Users
   const users = [
-    { id: uuid(), name: 'System Admin', email: 'admin@fleetos.io', role: 'admin' },
-    { id: uuid(), name: 'Divyansh Sharma', email: 'sharma2002divyansh@gmail.com', role: 'admin' },
-    { id: uuid(), name: 'Aditya Raj', email: 'b25bs1020@iitj.ac.in', role: 'admin' },
-    { id: uuid(), name: 'Rajesh Kumar', email: 'rajesh@fleetos.io', role: 'dispatcher' },
-    { id: uuid(), name: 'Priya Sharma', email: 'priya@fleetos.io', role: 'dispatcher' },
-    { id: uuid(), name: 'Arun Nair', email: 'arun@fleetos.io', role: 'driver' },
-    { id: uuid(), name: 'Suresh Babu', email: 'suresh@fleetos.io', role: 'driver' },
-    { id: uuid(), name: 'Kavitha R', email: 'kavitha@fleetos.io', role: 'driver' },
+    { id: uuid(), name: 'System Admin', email: 'admin@fleetos.io', role: 'admin', password: adminHash },
+    { id: uuid(), name: 'Divyansh Sharma', email: 'sharma2002divyansh@gmail.com', role: 'admin', password: defaultHash },
+    { id: uuid(), name: 'Aditya Raj', email: 'b25bs1020@iitj.ac.in', role: 'admin', password: defaultHash },
+    { id: uuid(), name: 'Rajesh Kumar', email: 'rajesh@fleetos.io', role: 'dispatcher', password: defaultHash },
+    { id: uuid(), name: 'Priya Sharma', email: 'priya@fleetos.io', role: 'dispatcher', password: defaultHash },
+    { id: uuid(), name: 'Arun Nair', email: 'arun@fleetos.io', role: 'driver', password: defaultHash },
+    { id: uuid(), name: 'Suresh Babu', email: 'suresh@fleetos.io', role: 'driver', password: defaultHash },
+    { id: uuid(), name: 'Kavitha R', email: 'kavitha@fleetos.io', role: 'driver', password: defaultHash },
   ];
   for (const u of users) {
-    run('INSERT INTO users (id, name, email, password, role) VALUES (?,?,?,?,?)', [u.id, u.name, u.email, hash, u.role]);
+    run('INSERT INTO users (id, name, email, password, role) VALUES (?,?,?,?,?)', [u.id, u.name, u.email, u.password || defaultHash, u.role]);
   }
 
   const drivers = users.filter(u => u.role === 'driver');

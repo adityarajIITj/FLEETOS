@@ -153,10 +153,11 @@
   });
 
   function quickLogin(email) {
+    const pass = email === 'admin@fleetos.io' ? '123' : 'password123';
     document.getElementById('email').value = email;
-    document.getElementById('password').value = 'password123';
+    document.getElementById('password').value = pass;
     switchAuthTab('password');
-    doLogin(email, 'password123');
+    doLogin(email, pass);
   }
 
   // --- OTP Login ---

@@ -20,8 +20,8 @@ export default function Login({ role, onEnter }: LoginProps) {
     e.preventDefault();
     setError('');
 
-    if (!email.includes('@') || password.length < 6) {
-      setError('Enter a valid email and password (6+ characters).');
+    if (!email.includes('@') || password.length < 1) {
+      setError('Enter a valid email and password.');
       return;
     }
 
@@ -30,10 +30,10 @@ export default function Login({ role, onEnter }: LoginProps) {
       const res = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, selectedRole: role }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.data?.token) {
         login(data.data.token, data.data.user);
         onEnter();
       } else {
@@ -47,18 +47,19 @@ export default function Login({ role, onEnter }: LoginProps) {
   };
 
   const quickLogin = async (qEmail: string) => {
+    const qPass = qEmail === 'admin@fleetos.io' ? '123' : 'password123';
     setEmail(qEmail);
-    setPassword('password123');
+    setPassword(qPass);
     setError('');
     setLoading(true);
     try {
       const res = await fetch('/api/v1/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: qEmail, password: 'password123' }),
+        body: JSON.stringify({ email: qEmail, password: qPass, selectedRole: role }),
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.data?.token) {
         login(data.data.token, data.data.user);
         onEnter();
       } else {
@@ -144,7 +145,7 @@ export default function Login({ role, onEnter }: LoginProps) {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Minimum 6 characters"
+              placeholder="Enter password"
               className="mt-2 w-full border border-white/10 bg-[#06111e] px-3 py-3 text-sm text-white placeholder:text-slate-700"
             />
           </label>
@@ -187,7 +188,7 @@ export default function Login({ role, onEnter }: LoginProps) {
           </div>
 
           <p className="mt-5 text-center text-[10px] leading-4 text-slate-600">
-            Connected to FleetOS API · demo credentials: password123
+            Connected to FleetOS API · demo credentials: admin@fleetos.io (pass: 123)
           </p>
         </form>
       </div>

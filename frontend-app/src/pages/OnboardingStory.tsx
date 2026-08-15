@@ -118,8 +118,12 @@ export default function OnboardingStory({ onComplete }: OnboardingStoryProps) {
       setAuthError('Please enter a valid email address.');
       return;
     }
-    if (password.length < 6) {
+    if (isSignUp && password.length < 6) {
       setAuthError('Password must be at least 6 characters.');
+      return;
+    }
+    if (!isSignUp && password.length < 1) {
+      setAuthError('Please enter your password.');
       return;
     }
 
