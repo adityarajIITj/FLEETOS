@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FleetOS Basic Tester</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #f0f0f0; }
+        .grid { display: flex; gap: 20px; }
+        .panel { flex: 1; background: white; padding: 15px; border: 1px solid #ccc; border-radius: 5px; height: 85vh; display: flex; flex-direction: column; }
+        button { padding: 8px 12px; margin: 5px 0; cursor: pointer; display: block; width: 100%; text-align: left; }
+        pre { background: #111; color: #0f0; padding: 10px; overflow: auto; flex: 1; margin-top: 10px; font-size: 12px; white-space: pre-wrap; }
+        input, select { padding: 5px; width: calc(100% - 14px); margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h2>FleetOS API Tester (Diagnostic UI)</h2>
+    <div class="grid">
+        <div class="panel" style="flex: 0.5">
+            <h3>Actions</h3>
+            <button onclick="login()">1. Force Login</button>
+            <button onclick="getVehicles()">2. Fetch Vehicles</button>
+            <button onclick="getShipments()">3. Fetch Shipments</button>
+            <hr>
+            <h4>Shipment Testing</h4>
+            <button onclick="createShipment()">+ Create Basic Shipment</button>
+            <button onclick="autoAllocate()">⚡ Auto-Allocate AI</button>
+            <input type="text" id="shipmentId" placeholder="Shipment ID (for update)">
+            <select id="shipmentStatus">
+                <option value="picked_up">Picked Up</option>
+                <option value="in_transit">In Transit</option>
+                <option value="delivered">Delivered</option>
+            </select>
+            <button onclick="updateShipment()">Update Status</button>
+            <hr>
+            <h4>GPS / Tracking</h4>
+            <button onclick="triggerGPS()">📡 Simulate Vehicle GPS</button>
+            <input type="text" id="trackingToken" placeholder="Tracking Token">
+            <button onclick="publicTrack()">Public Track (No Auth)</button>
+        </div>
+        
+        <div class="panel">
+            <h3>API Response Log</h3>
+            <pre id="apiLog">Waiting for actions...</pre>
+        </div>
+        
+        <div class="panel">
+            <h3>Socket.IO Live Events</h3>
+            <pre id="socketLog">Connecting...</pre>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        let token = null;
+
+        function logApi(text, obj = null) {
+            const el = document.getElementById('apiLog');
+            let output = `[${new Date().toLocaleTimeString()}] ${text}\n`;
+            if (obj) output += JSON.stringify(obj, null, 2) + '\n\n';
+            el.innerHTML = output + el.innerHTML;
+        }
+
+        function logSocket(text, obj = null) {
+            const el = document.getElementById('socketLog');
+            let output = `[${new Date().toLocaleTimeString()}] ${text}\n`;
+            if (obj) output += JSON.stringify(obj, null, 2) + '\n\n';
+            el.innerHTML = output + el.innerHTML;
+        }
+
+        async function api(method, path, body = null) {
+            if (!token && path !== '/api/v1/auth/login') {
+                logApi("Warning: No token! Call Force Login first.", null);
+                return null;
+            }
+            const opts = { method, headers: { 'Content-Type': 'application/json' } };
+            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+            if (body) opts.body = JSON.stringify(body);
+
+            try {
+                const res = await fetch(path, opts);
+                const data = await res.json();
+                logApi(`${method} ${path}`, data);
+                return data;
+            } catch (e) {
+                logApi(`ERROR ${method} ${path}`, e.message);
+            }
+        }
+
+        async function login() {
+            logApi('Attempting login as rajesh@fleetos.io...');
+            const data = await api('POST', '/api/v1/auth/login', { email: 'rajesh@fleetos.io', password: 'password123' });
+            if (data && data.success) {
+                token = data.data.token;
+                logApi('Login Success! Token acquired.');
+            }
+        }
+
+        async function getVehicles() { await api('GET', '/api/v1/fleet/vehicles'); }
+        async function getShipments() { await api('GET', '/api/v1/shipments'); }
+        async function autoAllocate() { await api('POST', '/api/v1/allocation/auto'); }
+        
+        async function createShipment() {
+            const payload = {
+                cargo_type: 'Test Medical Supplies', weight_kg: 500,
+                origin_address: 'Bangalore', origin_lat: 12.9716, origin_lng: 77.5946,
+                dest_address: 'Mysore', dest_lat: 12.2958, dest_lng: 76.6394,
+                priority: 'high'
+            };
+            const res = await api('POST', '/api/v1/shipments', payload);
+            if (res && res.success) {
+                document.getElementById('shipmentId').value = res.data.id;
+                document.getElementById('trackingToken').value = res.data.tracking_token;
+            }
+        }
+
+        async function updateShipment() {
+            const id = document.getElementById('shipmentId').value;
+            const status = document.getElementById('shipmentStatus').value;
+            if (!id) return alert('Enter a shipment ID');
+            await api('PUT', `/api/v1/shipments/${id}/status`, { status });
+        }
+
+        async function publicTrack() {
+            const t = document.getElementById('trackingToken').value;
+            if (!t) return alert('Enter a tracking token');
+            // Public track doesn't need auth, so we bypass the wrapper
+            try {
+                const res = await fetch(`/api/v1/shipments/track/${t}`);
+                const data = await res.json();
+                logApi(`GET /api/v1/shipments/track/${t}`, data);
+            } catch (e) {
+                logApi(`ERROR /track`, e.message);
+            }
+        }
+
+        async function triggerGPS() {
+            // Pick the first vehicle
+            const vRes = await api('GET', '/api/v1/fleet/vehicles');
+            if (vRes && vRes.data && vRes.data.length > 0) {
+                const v = vRes.data[0];
+                const newLat = (v.current_lat || 12.9716) + 0.01;
+                const newLng = (v.current_lng || 77.5946) + 0.01;
+                await api('POST', `/api/v1/fleet/vehicles/${v.id}/location`, { lat: newLat, lng: newLng, speed: 60 });
+            }
+        }
+
+        // Setup Socket
+        const socket = io();
+        socket.on('connect', () => logSocket('Connected to Socket.IO!'));
+        socket.on('vehicle:update', (data) => logSocket('vehicle:update', data));
+        socket.on('shipment:status_update', (data) => logSocket('shipment:status_update', data));
+        socket.on('disconnect', () => logSocket('Disconnected'));
+
+        // Auto-login on load
+        window.onload = login;
+    </script>
+</body>
+</html>

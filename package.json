@@ -1,0 +1,13 @@
+{
+  "name": "fleetos",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "backend:dev": "npm --prefix backend run dev",
+    "frontend:dev": "npm --prefix frontend-app run dev",
+    "frontend:build": "npm --prefix frontend-app run build",
+    "seed": "npm --prefix backend run seed",
+    "simulate": "npm --prefix backend run simulate"
+  }
+}

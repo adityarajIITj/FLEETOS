@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FleetOS — Driver App</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #252830;
+      --border: #2e313a; --text: #e4e4e7; --text2: #9ca3af;
+      --accent: #6366f1; --green: #22c55e; --orange: #f59e0b;
+    }
+    html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    body { display: flex; flex-direction: column; }
+    
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 16px; display: flex; align-items: center; justify-content: space-between; height: 60px; flex-shrink: 0; z-index: 2000; }
+    header h1 { font-size: 16px; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+    .logout-btn { padding: 6px 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; color: #ef4444; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+    .map-container { flex: 1; position: relative; background: #1a1d27; }
+    #map { width: 100%; height: 100%; position: absolute; inset: 0; z-index: 1; }
+    
+    .bottom-sheet { position: absolute; bottom: 0; left: 0; right: 0; background: var(--surface); border-top: 1px solid var(--border); border-top-left-radius: 16px; border-top-right-radius: 16px; padding: 20px; z-index: 1000; box-shadow: 0 -8px 32px rgba(0,0,0,0.5); transform: translateY(0); transition: transform 0.3s; }
+    .bottom-sheet.hidden { transform: translateY(calc(100% - 60px)); }
+    .handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 16px; cursor: pointer; }
+    
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .info-box { background: var(--surface2); padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
+    .info-box .label { font-size: 10px; color: var(--text2); text-transform: uppercase; margin-bottom: 4px; font-weight: 700; }
+    .info-box .val { font-size: 15px; font-weight: 700; }
+
+    .btn { width: 100%; padding: 14px; background: var(--accent); border: none; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s; }
+    .btn:active { transform: scale(0.98); }
+    .btn-green { background: var(--green); }
+    .btn-orange { background: var(--orange); }
+
+    .route-picker { display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .route-opt { padding: 12px; margin-bottom: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+    .route-opt:active { background: var(--surface); }
+
+    .toast-container { position: fixed; top: 70px; right: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    .toast { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 12px; color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,0.5); animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in forwards; animation-delay: 0s, 3s; pointer-events: auto; }
+    @keyframes toastIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
+  </style>
+</head>
+<body>
+
+<div class="toast-container" id="toast-container"></div>
+
+<header>
+  <h1>🚛 Driver Module</h1>
+  <button onclick="logout()" class="logout-btn">Logout</button>
+</header>
+
+<div class="map-container">
+  <div id="map"></div>
+  
+  <div class="bottom-sheet" id="bottom-sheet">
+    <div class="handle" onclick="document.getElementById('bottom-sheet').classList.toggle('hidden')"></div>
+    
+    <div id="no-load" style="text-align:center; padding: 20px; color:var(--text2); display:none;">
+      <h3>No Active Load</h3>
+      <p style="font-size:13px; margin-top:8px;">You are currently available for dispatch.</p>
+    </div>
+
+    <div id="active-load" style="display:none;">
+      <h3 style="margin-bottom: 4px; font-size: 16px;" id="l-cargo">Cargo</h3>
+      <p style="font-size: 12px; color: var(--text2); margin-bottom: 16px;" id="l-route">Origin → Dest</p>
+
+      <div class="info-grid">
+        <div class="info-box">
+          <div class="label">Status</div>
+          <div class="val" id="l-status" style="color:var(--accent)">-</div>
+        </div>
+        <div class="info-box">
+          <div class="label">ETA</div>
+          <div class="val" id="l-eta">-</div>
+        </div>
+      </div>
+
+      <div id="action-box"></div>
+
+      <div class="route-picker" id="route-picker">
+        <h4 style="margin-bottom: 10px; font-size: 13px; color:var(--text2);">Select Route</h4>
+        <div id="route-opts"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  // Auth
+  const token = sessionStorage.getItem('fleetToken');
+  if (!token) window.location.href = '/login.html';
+  const user = JSON.parse(sessionStorage.getItem('fleetUser') || '{}');
+  if (user.role !== 'driver') window.location.href = '/';
+
+  function logout() {
+    sessionStorage.clear();
+    window.location.href = '/login.html';
+  }
+
+  function showToast(title) {
+    const el = document.createElement('div');
+    el.className = 'toast'; el.textContent = title;
+    document.getElementById('toast-container').appendChild(el);
+    setTimeout(() => el.remove(), 3500);
+  }
+
+  async function api(method, path, body) {
+    const opts = { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` } };
+    if (body) opts.body = JSON.stringify(body);
+    const res = await fetch(path, opts);
+    if (res.status === 401) logout();
+    const data = await res.json();
+    return data;
+  }
+
+  let map = null, socket = null;
+  let myVehicle = null;
+  let activeShipment = null;
+  let vehicleMarker = null, destMarker = null, routeLine = null;
+  let altRoutes = [];
+
+  function initMap() {
+    map = L.map('map', { zoomControl: false }).setView([12.9716, 77.5946], 12);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+  }
+
+  async function loadData() {
+    try {
+      // Find my vehicle
+      const vRes = await api('GET', '/api/v1/fleet/vehicles');
+      myVehicle = (vRes.data || []).find(v => v.assigned_driver === user.id);
+      
+      if (!myVehicle) {
+        document.getElementById('no-load').style.display = 'block';
+        document.getElementById('no-load').innerHTML = '<h3>No Vehicle Assigned</h3><p style="font-size:13px; margin-top:8px;">Contact dispatch to register your vehicle.</p>';
+        return;
+      }
+
+      // Find my active load
+      const sRes = await api('GET', '/api/v1/shipments');
+      activeShipment = (sRes.data || []).find(s => s.assigned_vehicle === myVehicle.id && s.status !== 'delivered' && s.status !== 'cancelled');
+
+      renderState();
+    } catch (e) {
+      console.error(e);
+      showToast('Data load failed');
+    }
+  }
+
+  async function renderState() {
+    if (!myVehicle) return;
+
+    if (myVehicle.current_lat) {
+      if (vehicleMarker) vehicleMarker.setLatLng([myVehicle.current_lat, myVehicle.current_lng]);
+      else {
+        vehicleMarker = L.marker([myVehicle.current_lat, myVehicle.current_lng], {
+          icon: L.divIcon({ className: '', html: `<div style="background:#3b82f6;border:2px solid #fff;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px #3b82f6;">🚛</div>`, iconSize:[24,24] })
+        }).addTo(map);
+        map.setView([myVehicle.current_lat, myVehicle.current_lng], 14);
+      }
+    }
+
+    if (!activeShipment) {
+      document.getElementById('no-load').style.display = 'block';
+      document.getElementById('active-load').style.display = 'none';
+      if (destMarker) { map.removeLayer(destMarker); destMarker = null; }
+      if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+      return;
+    }
+
+    document.getElementById('no-load').style.display = 'none';
+    document.getElementById('active-load').style.display = 'block';
+    
+    document.getElementById('l-cargo').textContent = activeShipment.cargo_type;
+    document.getElementById('l-route').textContent = activeShipment.origin_address + ' → ' + activeShipment.dest_address;
+    document.getElementById('l-status').textContent = activeShipment.status.replace('_', ' ').toUpperCase();
+
+    // Map Markers & Route
+    if (!destMarker) {
+      destMarker = L.marker([activeShipment.dest_lat, activeShipment.dest_lng], {
+        icon: L.divIcon({ className: '', html: `<div style="background:#ef4444;border:2px solid #fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 8px #ef4444;font-size:10px;">📍</div>`, iconSize:[20,20] })
+      }).addTo(map);
+    }
+    
+    // Draw basic route if none exists
+    if (!routeLine && myVehicle.current_lat) {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${myVehicle.current_lng},${myVehicle.current_lat};${activeShipment.dest_lng},${activeShipment.dest_lat}?overview=full&geometries=geojson`;
+        const rt = await (await fetch(url)).json();
+        if (rt.routes && rt.routes.length > 0) {
+          routeLine = L.geoJSON(rt.routes[0].geometry, { style: { color: '#6366f1', weight: 4, dashArray: '6, 6' } }).addTo(map);
+        }
+      } catch (e) {}
+    }
+
+    // Actions
+    const box = document.getElementById('action-box');
+    const rp = document.getElementById('route-picker');
+    if (activeShipment.status === 'allocated') {
+      box.innerHTML = `<button class="btn btn-orange" onclick="updateStatus('picked_up')">📦 Mark Picked Up</button>
+                       <button class="btn" style="margin-top:8px;" onclick="loadRouteOptions()">🛣️ Choose Route</button>`;
+      rp.style.display = 'none';
+    } else if (activeShipment.status === 'picked_up') {
+      box.innerHTML = `<button class="btn" onclick="updateStatus('in_transit')">🚚 Start Transit</button>`;
+      rp.style.display = 'none';
+    } else if (activeShipment.status === 'in_transit') {
+      box.innerHTML = `<button class="btn btn-green" onclick="updateStatus('delivered')">✅ Mark Delivered</button>
+                       <button class="btn" style="margin-top:8px; background:var(--surface2); color:var(--text); border:1px solid var(--border);" onclick="loadRouteOptions()">🛣️ Reroute</button>`;
+      rp.style.display = 'none';
+    }
+
+    // ETA
+    try {
+      const etaRes = await api('GET', `/api/v1/shipments/${activeShipment.id}/eta`);
+      document.getElementById('l-eta').textContent = etaRes.data.eta_minutes ? etaRes.data.eta_minutes + ' min' : 'Calc...';
+    } catch(e) {}
+  }
+
+  async function updateStatus(status) {
+    try {
+      await api('PUT', `/api/v1/shipments/${activeShipment.id}/status`, { status });
+      showToast('Status Updated');
+      loadData();
+    } catch(e) { alert('Failed: ' + e.message); }
+  }
+
+  async function loadRouteOptions() {
+    document.getElementById('route-picker').style.display = 'block';
+    document.getElementById('action-box').style.display = 'none';
+    document.getElementById('route-opts').innerHTML = '<div style="color:var(--text2);font-size:12px;text-align:center">Finding optimal paths...</div>';
+
+    try {
+      const url = `https://router.project-osrm.org/route/v1/driving/${myVehicle.current_lng},${myVehicle.current_lat};${activeShipment.dest_lng},${activeShipment.dest_lat}?overview=full&geometries=geojson&alternatives=3`;
+      const rt = await (await fetch(url)).json();
+      
+      altRoutes.forEach(r => map.removeLayer(r));
+      altRoutes = [];
+      if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+
+      if (rt.routes && rt.routes.length > 0) {
+        const colors = ['#3b82f6', '#f59e0b', '#ec4899'];
+        let html = '';
+        rt.routes.forEach((r, i) => {
+          const color = colors[i % colors.length];
+          const poly = L.geoJSON(r.geometry, { style: { color, weight: i===0?6:4, opacity: 0.8 } }).addTo(map);
+          altRoutes.push(poly);
+          html += `<div class="route-opt" onclick="selectRoute(${i})" style="border-color:${color}">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <strong style="color:${color}">Option ${i+1}</strong>
+              <strong>${Math.round(r.duration/60)} min</strong>
+            </div>
+            <div style="font-size:11px; color:var(--text2); margin-top:2px;">Distance: ${(r.distance/1000).toFixed(1)} km</div>
+          </div>`;
+        });
+        document.getElementById('route-opts').innerHTML = html;
+        map.fitBounds(altRoutes[0].getBounds(), { padding: [30, 30] });
+      }
+    } catch (e) {
+      document.getElementById('route-opts').innerHTML = '<div style="color:var(--red);font-size:12px;">Failed to load routes</div>';
+    }
+  }
+
+  function selectRoute(idx) {
+    showToast('Navigation Set');
+    document.getElementById('route-picker').style.display = 'none';
+    document.getElementById('action-box').style.display = 'block';
+    
+    // Hide all but selected
+    altRoutes.forEach((poly, i) => {
+      if (i !== idx) map.removeLayer(poly);
+      else routeLine = poly; // keep as primary
+    });
+    altRoutes = [];
+  }
+
+  function initSocket() {
+    socket = io({ transports: ['websocket'] });
+    socket.on('vehicle:update', (data) => {
+      if (myVehicle && data.vehicleId === myVehicle.id) {
+        myVehicle.current_lat = data.lat;
+        myVehicle.current_lng = data.lng;
+        if (vehicleMarker) vehicleMarker.setLatLng([data.lat, data.lng]);
+      }
+    });
+    socket.on('shipment:status_update', (data) => {
+      if (activeShipment && data.shipmentId === activeShipment.id) {
+        loadData();
+      }
+    });
+  }
+
+  window.addEventListener('load', () => {
+    initMap();
+    initSocket();
+    loadData();
+    setInterval(loadData, 20000);
+  });
+</script>
+</body>
+</html>

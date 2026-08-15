@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FleetOS — Login</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#0f1117;--surface:#1a1d27;--surface2:#252830;--border:#2e313a;--text:#e4e4e7;--text2:#9ca3af;--accent:#6366f1;--green:#22c55e;--red:#ef4444}
+    body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;background-image:radial-gradient(ellipse at 20% 50%,rgba(99,102,241,0.08) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(34,197,94,0.05) 0%,transparent 50%)}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px;width:440px;box-shadow:0 24px 64px rgba(0,0,0,0.5)}
+    .logo{font-size:24px;font-weight:800;margin-bottom:6px}.logo span{color:#818cf8}
+    .subtitle{color:var(--text2);font-size:13px;margin-bottom:28px}
+    label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text2);margin-bottom:5px;letter-spacing:0.4px}
+    input{width:100%;padding:11px 14px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;outline:none;margin-bottom:16px;transition:border-color 0.2s}
+    input:focus{border-color:var(--accent)}
+    .btn{width:100%;padding:13px;border:none;border-radius:8px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s;margin-top:4px}
+    .btn:hover{transform:translateY(-1px)}.btn:active{transform:translateY(0)}.btn:disabled{opacity:0.6;cursor:not-allowed}
+    .btn-primary{background:var(--accent)}.btn-primary:hover{background:#818cf8}
+    .btn-otp{background:#059669}.btn-otp:hover{background:#10b981}
+    .err{color:var(--red);font-size:12px;margin-top:8px;display:none;text-align:center;padding:8px;background:rgba(239,68,68,0.1);border-radius:6px}
+    .ok{color:var(--green);font-size:12px;margin-top:8px;display:none;text-align:center;padding:8px;background:rgba(34,197,94,0.1);border-radius:6px}
+
+    .tabs{display:flex;gap:0;margin-bottom:24px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    .tab{flex:1;padding:10px;text-align:center;font-size:12px;font-weight:700;cursor:pointer;background:var(--surface2);color:var(--text2);transition:all 0.2s;border:none}
+    .tab.active{background:var(--accent);color:white}
+
+    .form-section{display:none}.form-section.active{display:block}
+
+    .otp-input{text-align:center;font-size:24px;font-weight:800;letter-spacing:12px;padding:14px}
+
+    .quick-logins{margin-top:24px;border-top:1px solid var(--border);padding-top:20px}
+    .quick-logins h4{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;text-align:center}
+    .role-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .role-btn{padding:10px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-weight:600;cursor:pointer;text-align:center;transition:all 0.2s}
+    .role-btn:hover{border-color:var(--accent);background:rgba(99,102,241,0.1)}
+    .role-btn .icon{font-size:20px;display:block;margin-bottom:4px}
+    .role-btn .name{color:var(--text2);font-size:10px;display:block;margin-top:2px}
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">🚛 Fleet<span>OS</span></div>
+  <div class="subtitle">Smart Fleet Coordination Platform</div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchAuthTab('password')">🔑 Password</button>
+    <button class="tab" onclick="switchAuthTab('otp')">📧 Email OTP</button>
+  </div>
+
+  <!-- Password Login -->
+  <div id="password-section" class="form-section active">
+    <form id="login-form">
+      <label>Email</label>
+      <input type="email" id="email" required autocomplete="email" placeholder="you@fleetos.io">
+      <label>Password</label>
+      <input type="password" id="password" required autocomplete="current-password" placeholder="••••••••">
+      <div class="err" id="err"></div>
+      <button type="submit" class="btn btn-primary" id="submit-btn">Sign In →</button>
+    </form>
+  </div>
+
+  <!-- OTP Login -->
+  <div id="otp-section" class="form-section">
+    <!-- Step 1: Enter email -->
+    <div id="otp-step1">
+      <label>Email Address</label>
+      <input type="email" id="otp-email" placeholder="you@fleetos.io">
+      <div class="err" id="otp-err1"></div>
+      <div class="ok" id="otp-ok1"></div>
+      <button type="button" class="btn btn-otp" id="otp-send-btn" onclick="sendOTP()">📧 Send OTP Code</button>
+    </div>
+    <!-- Step 2: Enter code -->
+    <div id="otp-step2" style="display:none">
+      <p style="font-size:13px;color:var(--text2);margin-bottom:16px;text-align:center">
+        Enter the 6-digit code sent to <strong id="otp-sent-email" style="color:var(--accent)"></strong>
+      </p>
+      <input type="text" id="otp-code" class="otp-input" maxlength="6" placeholder="000000" autocomplete="one-time-code">
+      <div class="err" id="otp-err2"></div>
+      <button type="button" class="btn btn-otp" id="otp-verify-btn" onclick="verifyOTP()">✅ Verify & Login</button>
+      <button type="button" class="btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);margin-top:8px" onclick="resetOTP()">← Back</button>
+    </div>
+  </div>
+
+  <!-- Quick Demo Logins -->
+  <div class="quick-logins">
+    <h4>Quick Demo Login</h4>
+    <div class="role-btns">
+      <button class="role-btn" onclick="quickLogin('admin@fleetos.io')">
+        <span class="icon">👑</span>Admin<span class="name">admin@fleetos.io</span>
+      </button>
+      <button class="role-btn" onclick="quickLogin('rajesh@fleetos.io')">
+        <span class="icon">📋</span>Dispatcher<span class="name">rajesh@fleetos.io</span>
+      </button>
+      <button class="role-btn" onclick="quickLogin('arun@fleetos.io')">
+        <span class="icon">🚛</span>Driver<span class="name">arun@fleetos.io</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  if (sessionStorage.getItem('fleetToken')) {
+    const u = JSON.parse(sessionStorage.getItem('fleetUser') || '{}');
+    window.location.replace(u.role === 'driver' ? '/driver.html' : '/');
+  }
+
+  function switchAuthTab(tab) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.form-section').forEach(s => s.classList.remove('active'));
+    if (tab === 'password') {
+      document.querySelectorAll('.tab')[0].classList.add('active');
+      document.getElementById('password-section').classList.add('active');
+    } else {
+      document.querySelectorAll('.tab')[1].classList.add('active');
+      document.getElementById('otp-section').classList.add('active');
+    }
+  }
+
+  function handleLoginSuccess(data) {
+    sessionStorage.setItem('fleetToken', data.data.token);
+    sessionStorage.setItem('fleetUser', JSON.stringify(data.data.user));
+    window.location.href = data.data.user.role === 'driver' ? '/driver.html' : '/';
+  }
+
+  // --- Password Login ---
+  const form = document.getElementById('login-form');
+  const err = document.getElementById('err');
+  const submitBtn = document.getElementById('submit-btn');
+
+  async function doLogin(email, password) {
+    err.style.display = 'none';
+    submitBtn.textContent = 'Signing in...';
+    submitBtn.disabled = true;
+    try {
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (data.success) { handleLoginSuccess(data); }
+      else { throw new Error(data.error?.message || 'Login failed'); }
+    } catch (e) {
+      err.textContent = e.message; err.style.display = 'block';
+      submitBtn.textContent = 'Sign In →'; submitBtn.disabled = false;
+    }
+  }
+
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    doLogin(document.getElementById('email').value, document.getElementById('password').value);
+  });
+
+  function quickLogin(email) {
+    document.getElementById('email').value = email;
+    document.getElementById('password').value = 'password123';
+    switchAuthTab('password');
+    doLogin(email, 'password123');
+  }
+
+  // --- OTP Login ---
+  async function sendOTP() {
+    const email = document.getElementById('otp-email').value;
+    const errEl = document.getElementById('otp-err1');
+    const okEl = document.getElementById('otp-ok1');
+    const btn = document.getElementById('otp-send-btn');
+    errEl.style.display = 'none'; okEl.style.display = 'none';
+    if (!email) { errEl.textContent = 'Enter your email'; errEl.style.display = 'block'; return; }
+    
+    btn.textContent = 'Sending...'; btn.disabled = true;
+    try {
+      const res = await fetch('/api/v1/auth/otp/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('otp-step1').style.display = 'none';
+        document.getElementById('otp-step2').style.display = 'block';
+        document.getElementById('otp-sent-email').textContent = email;
+      } else { throw new Error(data.error?.message || 'Failed'); }
+    } catch (e) {
+      errEl.textContent = e.message; errEl.style.display = 'block';
+      btn.textContent = '📧 Send OTP Code'; btn.disabled = false;
+    }
+  }
+
+  async function verifyOTP() {
+    const email = document.getElementById('otp-email').value;
+    const code = document.getElementById('otp-code').value;
+    const errEl = document.getElementById('otp-err2');
+    const btn = document.getElementById('otp-verify-btn');
+    errEl.style.display = 'none';
+    if (!code || code.length < 6) { errEl.textContent = 'Enter the 6-digit code'; errEl.style.display = 'block'; return; }
+
+    btn.textContent = 'Verifying...'; btn.disabled = true;
+    try {
+      const res = await fetch('/api/v1/auth/otp/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code })
+      });
+      const data = await res.json();
+      if (data.success) { handleLoginSuccess(data); }
+      else { throw new Error(data.error?.message || 'Invalid code'); }
+    } catch (e) {
+      errEl.textContent = e.message; errEl.style.display = 'block';
+      btn.textContent = '✅ Verify & Login'; btn.disabled = false;
+    }
+  }
+
+  function resetOTP() {
+    document.getElementById('otp-step1').style.display = 'block';
+    document.getElementById('otp-step2').style.display = 'none';
+    document.getElementById('otp-send-btn').textContent = '📧 Send OTP Code';
+    document.getElementById('otp-send-btn').disabled = false;
+    document.getElementById('otp-code').value = '';
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FleetOS — Fleet Command Center</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0f1117; --surface: #1a1d27; --surface2: #252830;
+      --border: #2e313a; --text: #e4e4e7; --text2: #9ca3af;
+      --accent: #6366f1; --accent2: #818cf8; --green: #22c55e;
+      --red: #ef4444; --orange: #f59e0b; --blue: #3b82f6;
+    }
+    html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+    body { display: flex; flex-direction: column; }
+    
+    /* Header */
+    header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; display: flex; align-items: center; justify-content: space-between; height: 56px; flex-shrink: 0; z-index: 2000; }
+    header h1 { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    header h1 span { color: var(--accent2); }
+    .header-right { display: flex; align-items: center; gap: 12px; font-size: 13px; color: var(--text2); }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; box-shadow: 0 0 8px var(--green); animation: dotPulse 2s infinite; }
+    @keyframes dotPulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+    .btn-sm { padding: 6px 12px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; transition: all 0.2s; }
+    .btn-sm:hover { background: var(--accent); color: white; border-color: var(--accent); }
+    .clock { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--text); font-size: 13px; }
+    
+    /* Main layout */
+    .main { display: flex; flex: 1; height: calc(100vh - 56px); width: 100%; overflow: hidden; position: relative; }
+    
+    /* Sidebar */
+    .sidebar { width: 380px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; flex-shrink: 0; z-index: 1000; }
+    .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--surface2); }
+    .tab-btn { flex: 1; padding: 12px; border: none; background: transparent; color: var(--text2); font-size: 12px; font-weight: 700; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .tab-btn.active { color: var(--accent2); border-bottom-color: var(--accent); background: var(--surface); }
+    
+    .sidebar-header { padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; background: rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+    .sidebar-content { flex: 1; overflow-y: auto; }
+    .sidebar-content::-webkit-scrollbar { width: 4px; }
+    .sidebar-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* Filter bar */
+    .filter-bar { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
+    .filter-chip { padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text2); transition: all 0.2s; text-transform: uppercase; }
+    .filter-chip.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .filter-chip:hover:not(.active) { background: var(--surface2); }
+    
+    /* KPI cards */
+    .kpi-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; padding: 10px 12px; background: var(--surface); border-bottom: 1px solid var(--border); }
+    .kpi { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; transition: transform 0.2s; }
+    .kpi:hover { transform: translateY(-2px); }
+    .kpi .label { font-size: 9px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.3px; font-weight: 600; }
+    .kpi .value { font-size: 20px; font-weight: 700; margin-top: 2px; line-height: 1; }
+    .kpi .value.green { color: var(--green); }
+    .kpi .value.orange { color: var(--orange); }
+    .kpi .value.blue { color: var(--blue); }
+    .kpi .value.accent { color: var(--accent2); }
+    .kpi .value.red { color: var(--red); }
+    
+    /* Vehicle & Shipment lists */
+    .item-card { padding: 10px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: all 0.15s; position: relative; }
+    .item-card:hover { background: var(--surface2); }
+    .item-card.active { background: var(--surface2); border-left: 4px solid var(--accent); }
+    .item-card .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .item-card .title { font-size: 13px; font-weight: 700; color: var(--text); }
+    .item-card .meta { font-size: 11px; color: var(--text2); display: flex; gap: 8px; flex-wrap: wrap; }
+    .item-card .eta-label { font-size: 10px; color: var(--green); font-weight: 700; margin-top: 3px; }
+    .badge { padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+    .badge.available { background: #16291e; color: var(--green); border: 1px solid rgba(34, 197, 94, 0.3); }
+    .badge.en_route, .badge.in_transit { background: #1e2436; color: var(--blue); border: 1px solid rgba(59, 130, 246, 0.3); }
+    .badge.allocated { background: #1e2436; color: #a78bfa; border: 1px solid rgba(167,139,250,0.3); }
+    .badge.pending, .badge.idle { background: #2a2416; color: var(--orange); border: 1px solid rgba(245, 158, 11, 0.3); }
+    .badge.delivered { background: #162929; color: #06b6d4; border: 1px solid rgba(6, 182, 212, 0.3); }
+    .badge.cancelled { background: #2a1616; color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+    .badge.picked_up { background: #16291e; color: var(--green); border: 1px solid rgba(34, 197, 94, 0.3); }
+    
+    /* Map */
+    .map-container { flex: 1; height: 100%; position: relative; background: #1a1d27; }
+    #map { width: 100%; height: 100%; position: absolute; inset: 0; z-index: 1; }
+    
+    .leaflet-popup-content-wrapper { background: var(--surface) !important; color: var(--text) !important; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    .leaflet-popup-tip { background: var(--surface) !important; }
+    .leaflet-popup-content { font-size: 13px; line-height: 1.6; margin: 12px 14px; }
+    .leaflet-container { background: #1a1d27 !important; font-family: inherit; }
+    
+    /* Bottom Info overlay */
+    .bottom-panel { position: absolute; bottom: 16px; left: 16px; right: 16px; background: rgba(26, 29, 39, 0.95); backdrop-filter: blur(10px); border: 1px solid var(--border); border-radius: 10px; padding: 12px 20px; font-size: 13px; z-index: 1000; display: flex; gap: 20px; align-items: center; box-shadow: 0 8px 32px rgba(0,0,0,0.4); flex-wrap: wrap; }
+    .bottom-panel .item { display: flex; flex-direction: column; gap: 2px; }
+    .bottom-panel .label { color: var(--text2); font-size: 10px; text-transform: uppercase; font-weight: 600; }
+    .bottom-panel .val { font-weight: 700; font-size: 14px; }
+    
+    /* Actions */
+    .actions { padding: 10px; border-top: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; gap: 6px; }
+    .btn { width: 100%; padding: 10px; border: none; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s; }
+    .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3); }
+    .btn-primary:hover { background: var(--accent2); transform: translateY(-1px); }
+    .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-danger { background: var(--red); color: #fff; }
+    .btn-danger:hover { opacity: 0.85; }
+    .btn-green { background: var(--green); color: #fff; }
+    .btn-green:hover { opacity: 0.85; }
+
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 9999; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+    .modal-overlay.active { opacity: 1; pointer-events: auto; }
+    .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; width: 480px; max-height: 90vh; overflow-y: auto; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
+    .modal h3 { font-size: 16px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text2); margin-bottom: 4px; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; outline: none; font-family: inherit; }
+    .form-group textarea { resize: vertical; min-height: 60px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* Custom vehicle marker pins */
+    .truck-pin { background: #3b82f6; border: 2px solid #ffffff; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); transition: transform 0.3s; }
+    .truck-pin.available { background: #22c55e; }
+    .truck-pin.en_route { background: #3b82f6; animation: truckPulse 2s infinite; }
+    .truck-pin.idle { background: #f59e0b; }
+    @keyframes truckPulse { 0%,100% { box-shadow: 0 0 4px rgba(59,130,246,0.5); } 50% { box-shadow: 0 0 16px rgba(59,130,246,0.8); } }
+
+    /* Toast notifications */
+    .toast-container { position: fixed; top: 70px; right: 16px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    .toast { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 16px; font-size: 12px; color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,0.5); pointer-events: auto; display: flex; align-items: center; gap: 10px; animation: toastIn 0.3s ease-out, toastOut 0.3s ease-in forwards; animation-delay: 0s, 4s; min-width: 280px; }
+    .toast .icon { font-size: 18px; }
+    .toast .msg { flex: 1; }
+    .toast .msg strong { display: block; font-size: 12px; margin-bottom: 2px; }
+    .toast .msg small { color: var(--text2); font-size: 10px; }
+    @keyframes toastIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    @keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
+
+    /* GPS trail */
+    .trail-dot { width: 6px; height: 6px; background: rgba(99,102,241,0.6); border-radius: 50%; border: 1px solid rgba(99,102,241,0.3); }
+
+    /* Shipment origin/dest markers */
+    .pin-marker { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; border: 2px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+
+    /* Activity log */
+    .activity-log { max-height: 180px; overflow-y: auto; padding: 8px 12px; }
+    .activity-item { padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text2); display: flex; gap: 8px; align-items: flex-start; }
+    .activity-item .time { color: var(--accent2); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- Header -->
+<header>
+  <h1>🚛 Fleet<span>OS</span> Command Center</h1>
+  <div class="header-right">
+    <span><span class="status-dot"></span> Live</span>
+    <span class="clock" id="live-clock">--:--:--</span>
+    <span id="user-name" style="font-weight: 600; color: var(--text);"></span>
+    <button onclick="openNewShipmentModal()" class="btn-sm" style="background:var(--accent); border-color:var(--accent); color:white;">+ Shipment</button>
+    <button onclick="openNewVehicleModal()" class="btn-sm">+ Vehicle</button>
+    <button onclick="openRouteModal()" class="btn-sm">🗺️ Route</button>
+    <a href="/tracking.html" target="_blank" class="btn-sm">Tracker ↗</a>
+    <button onclick="logout()" class="btn-sm" style="background:#2a1616;border-color:#ef4444;color:#ef4444;">Logout</button>
+  </div>
+</header>
+
+<!-- Main Layout -->
+<div class="main">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <!-- Tabs -->
+    <div class="sidebar-tabs">
+      <button class="tab-btn active" onclick="switchTab('vehicles')">🚛 Fleet</button>
+      <button class="tab-btn" onclick="switchTab('shipments')">📦 Cargo</button>
+      <button class="tab-btn" onclick="switchTab('analytics')">📊 Stats</button>
+      <button class="tab-btn" onclick="switchTab('activity')">📋 Log</button>
+    </div>
+
+    <!-- KPI Row -->
+    <div class="kpi-row">
+      <div class="kpi"><div class="label">Vehicles</div><div class="value blue" id="kpi-total">-</div></div>
+      <div class="kpi"><div class="label">En Route</div><div class="value green" id="kpi-enroute">-</div></div>
+      <div class="kpi"><div class="label">Available</div><div class="value orange" id="kpi-available">-</div></div>
+      <div class="kpi"><div class="label">Shipments</div><div class="value accent" id="kpi-shipments">-</div></div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar" id="filter-bar">
+      <span class="filter-chip active" onclick="setFilter('all')">All</span>
+      <span class="filter-chip" onclick="setFilter('available')">Available</span>
+      <span class="filter-chip" onclick="setFilter('en_route')">En Route</span>
+      <span class="filter-chip" onclick="setFilter('idle')">Idle</span>
+      <span class="filter-chip" onclick="setFilter('maintenance')">Maint.</span>
+    </div>
+
+    <div class="sidebar-header" id="tab-header-title">
+      <span>Active Vehicles</span>
+      <span id="list-count" style="color:var(--accent2)">0</span>
+    </div>
+
+    <div class="sidebar-content" id="sidebar-list">
+      <div style="padding:20px; text-align:center; color:var(--text2); font-size:13px;">Loading fleet data...</div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-primary" onclick="autoAllocate()">⚡ AI Auto-Allocate</button>
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-secondary" onclick="openAssignModal()" style="flex:1">🔗 Assign Manual</button>
+        <button class="btn btn-green" onclick="toggleGPSTrail()" style="flex:1" id="trail-btn">📡 Trail</button>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-secondary" onclick="showAllRoutes()" style="flex:1">🗺️ Routes</button>
+        <button class="btn btn-secondary" onclick="toggleGeofences()" style="flex:1" id="geo-btn">⭕ Geofence</button>
+        <button class="btn btn-secondary" onclick="toggleFuelStations()" style="flex:1" id="fuel-btn">⛽ Fuel</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Map -->
+  <div class="map-container">
+    <div id="map"></div>
+
+    <!-- Route Picker Overlay -->
+    <div id="route-picker" style="display:none; position:absolute; top:12px; right:60px; z-index:1000; background:rgba(26,29,39,0.95); backdrop-filter:blur(10px); border:1px solid var(--border); border-radius:10px; padding:14px; width:320px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <span style="font-size:13px; font-weight:700;">🛣️ Choose Route</span>
+        <span onclick="closeRoutePicker()" style="cursor:pointer; color:var(--text2);">✕</span>
+      </div>
+      <div id="route-options"></div>
+    </div>
+
+    <!-- Bottom Selected Bar -->
+    <div class="bottom-panel" id="bottom-panel" style="display:none">
+      <div class="item">
+        <span class="label">Selected</span>
+        <span class="val" id="bp-reg" style="color:var(--accent2)">-</span>
+      </div>
+      <div class="item">
+        <span class="label">Details</span>
+        <span class="val" id="bp-type">-</span>
+      </div>
+      <div class="item">
+        <span class="label">Status</span>
+        <span class="val" id="bp-status">-</span>
+      </div>
+      <div class="item">
+        <span class="label">Speed</span>
+        <span class="val" id="bp-speed" style="color:var(--green)">-</span>
+      </div>
+      <div class="item">
+        <span class="label">ETA</span>
+        <span class="val" id="bp-eta" style="color:var(--orange)">-</span>
+      </div>
+      <div class="item" id="bp-action-box" style="display:none">
+        <button class="btn-sm" id="bp-action-btn" style="background:var(--accent); color:white;">Advance ▶</button>
+      </div>
+      <div class="item" id="bp-route-box" style="display:none">
+        <button class="btn-sm" id="bp-route-btn" onclick="showRouteAlternatives()" style="background:#f59e0b; color:white;">🛣️ Pick Route</button>
+      </div>
+      <div class="item">
+        <button class="btn-sm" onclick="hideBottomPanel()" style="background:var(--red); color:white; font-size:10px;">✕</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: New Shipment -->
+<div class="modal-overlay" id="shipment-modal">
+  <div class="modal">
+    <h3>📦 Create New Shipment <span style="cursor:pointer" onclick="closeNewShipmentModal()">✕</span></h3>
+    <form onsubmit="submitNewShipment(event)">
+      <div class="form-group">
+        <label>Cargo Description</label>
+        <input type="text" id="m-cargo" placeholder="e.g. Vaccines, Laptops" required value="Emergency Medical Supplies">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Weight (kg)</label>
+          <input type="number" id="m-weight" value="600" required>
+        </div>
+        <div class="form-group">
+          <label>Priority</label>
+          <select id="m-priority">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high" selected>High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Vehicle Requirement</label>
+        <select id="m-req">
+          <option value="">Any Vehicle Type</option>
+          <option value="refrigerated" selected>Refrigerated</option>
+          <option value="heavy">Heavy Truck</option>
+          <option value="medium">Medium Commercial</option>
+          <option value="light">Light Vehicle</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Origin</label>
+        <input type="text" id="m-oaddr" value="Koramangala, Bangalore" required>
+        <div class="form-row" style="margin-top:6px;">
+          <input type="number" step="any" id="m-olat" value="12.9352" required placeholder="Lat">
+          <input type="number" step="any" id="m-olng" value="77.6245" required placeholder="Lng">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Destination</label>
+        <input type="text" id="m-daddr" value="Mysore City Hospital" required>
+        <div class="form-row" style="margin-top:6px;">
+          <input type="number" step="any" id="m-dlat" value="12.2958" required placeholder="Lat">
+          <input type="number" step="any" id="m-dlng" value="76.6394" required placeholder="Lng">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Special Instructions</label>
+        <textarea id="m-instructions" placeholder="Handle with care, temperature-sensitive, etc."></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary" style="margin-top:10px;">Save Shipment & Queue</button>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: New Vehicle -->
+<div class="modal-overlay" id="vehicle-modal">
+  <div class="modal">
+    <h3>🚛 Register New Vehicle <span style="cursor:pointer" onclick="closeModal('vehicle-modal')">✕</span></h3>
+    <form onsubmit="submitNewVehicle(event)">
+      <div class="form-group">
+        <label>Registration Number</label>
+        <input type="text" id="v-reg" placeholder="KA-01-XX-0000" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Type</label>
+          <select id="v-type" required>
+            <option value="light">Light</option>
+            <option value="medium" selected>Medium</option>
+            <option value="heavy">Heavy</option>
+            <option value="refrigerated">Refrigerated</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Fuel</label>
+          <select id="v-fuel" required>
+            <option value="diesel" selected>Diesel</option>
+            <option value="petrol">Petrol</option>
+            <option value="electric">Electric</option>
+            <option value="cng">CNG</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Capacity (kg)</label>
+        <input type="number" id="v-cap" value="5000" required>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Starting Lat</label>
+          <input type="number" step="any" id="v-lat" value="12.9716">
+        </div>
+        <div class="form-group">
+          <label>Starting Lng</label>
+          <input type="number" step="any" id="v-lng" value="77.5946">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary" style="margin-top:10px;">Register Vehicle</button>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Route Computation -->
+<div class="modal-overlay" id="route-modal">
+  <div class="modal">
+    <h3>🗺️ Compute OSRM Route <span style="cursor:pointer" onclick="closeModal('route-modal')">✕</span></h3>
+    <form onsubmit="computeRoute(event)">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Origin Lat</label>
+          <input type="number" step="any" id="r-olat" value="12.9716" required>
+        </div>
+        <div class="form-group">
+          <label>Origin Lng</label>
+          <input type="number" step="any" id="r-olng" value="77.5946" required>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Destination Lat</label>
+          <input type="number" step="any" id="r-dlat" value="12.2958" required>
+        </div>
+        <div class="form-group">
+          <label>Destination Lng</label>
+          <input type="number" step="any" id="r-dlng" value="76.6394" required>
+        </div>
+      </div>
+      <div id="route-result" style="display:none; margin-top:12px; padding:12px; background:var(--surface2); border-radius:8px;">
+        <div style="font-size:11px; color:var(--text2); text-transform:uppercase; margin-bottom:4px;">Route Result</div>
+        <div id="route-info" style="font-size:13px;"></div>
+      </div>
+      <button type="submit" class="btn btn-primary" style="margin-top:10px;">📍 Compute & Draw Route</button>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Manual Assignment -->
+<div class="modal-overlay" id="assign-modal">
+  <div class="modal">
+    <h3>🔗 Assign Vehicle to Shipment <span style="cursor:pointer" onclick="closeModal('assign-modal')">✕</span></h3>
+    <form onsubmit="submitAssign(event)">
+      <div class="form-group">
+        <label>Select Shipment</label>
+        <select id="a-shipment" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;"></select>
+      </div>
+      <div class="form-group">
+        <label>Select Vehicle</label>
+        <select id="a-vehicle" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;"></select>
+      </div>
+      <div id="assign-compat" style="padding:8px 12px;background:var(--surface2);border-radius:6px;font-size:12px;color:var(--text2);margin-bottom:12px;display:none"></div>
+      <button type="submit" class="btn btn-primary">Assign & Dispatch →</button>
+    </form>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// Guard: require login
+const _tok = sessionStorage.getItem('fleetToken');
+if (!_tok) window.location.replace('/login.html');
+const _user = JSON.parse(sessionStorage.getItem('fleetUser') || '{}');
+
+function logout() {
+  sessionStorage.removeItem('fleetToken');
+  sessionStorage.removeItem('fleetUser');
+  window.location.href = '/login.html';
+}
+
+let map = null, socket = null;
+const markers = {};
+const shipmentMarkers = [];
+const vehicleData = {};
+const shipmentData = {};
+let activeTab = 'vehicles';
+let activeRoutePolyline = null;
+let allRoutePolylines = [];
+let trailLayer = null;
+let trailActive = false;
+let authToken = _tok;
+let currentFilter = 'all';
+let activityLog = [];
+let selectedVehicleId = null;
+
+const statusColors = {
+  available: '#22c55e', en_route: '#3b82f6', in_transit: '#3b82f6',
+  pending: '#f59e0b', idle: '#f59e0b', delivered: '#06b6d4',
+  maintenance: '#ef4444', allocated: '#a78bfa', picked_up: '#22c55e',
+  cancelled: '#ef4444'
+};
+
+// --- Live Clock ---
+setInterval(() => {
+  document.getElementById('live-clock').textContent = new Date().toLocaleTimeString();
+}, 1000);
+
+// --- Toast Notifications ---
+function showToast(icon, title, detail) {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `<span class="icon">${icon}</span><div class="msg"><strong>${title}</strong><small>${detail}</small></div>`;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 4500);
+  addActivity(icon + ' ' + title + ' — ' + detail);
+}
+
+// --- Activity Log ---
+function addActivity(msg) {
+  const time = new Date().toLocaleTimeString();
+  activityLog.unshift({ time, msg });
+  if (activityLog.length > 50) activityLog.pop();
+  if (activeTab === 'activity') renderActivityLog();
+}
+
+function renderActivityLog() {
+  const container = document.getElementById('sidebar-list');
+  container.innerHTML = activityLog.map(a => `
+    <div class="activity-item"><span class="time">${a.time}</span><span>${a.msg}</span></div>
+  `).join('') || '<div style="padding:20px; text-align:center; color:var(--text2); font-size:13px;">No activity yet</div>';
+}
+
+// --- API Helper ---
+async function api(method, path, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (authToken) opts.headers['Authorization'] = `Bearer ${authToken}`;
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(path, opts);
+  if (res.status === 401) { logout(); return null; }
+  const data = await res.json();
+  if (!data.success) throw new Error(data.error?.message || 'API error');
+  return data;
+}
+
+// --- Map Init ---
+let mapReady = false;
+function initMap() {
+  if (map) return;
+  map = L.map('map', { zoomControl: false }).setView([12.9716, 77.5946], 11);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19, subdomains: 'abcd', attribution: '© OpenStreetMap © CARTO'
+  }).addTo(map);
+  L.control.zoom({ position: 'topright' }).addTo(map);
+  // Multiple invalidateSize calls to handle layout shifts
+  setTimeout(() => { if (map) { map.invalidateSize(); } }, 100);
+  setTimeout(() => { if (map) { map.invalidateSize(); mapReady = true; } }, 500);
+  setTimeout(() => { if (map) { map.invalidateSize(); } }, 1500);
+}
+
+function createMarkerIcon(status) {
+  return L.divIcon({
+    className: '', iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14],
+    html: `<div class="truck-pin ${status || 'available'}">🚛</div>`
+  });
+}
+
+function createPinIcon(color, emoji) {
+  return L.divIcon({
+    className: '', iconSize: [20, 20], iconAnchor: [10, 10],
+    html: `<div class="pin-marker" style="background:${color}">${emoji}</div>`
+  });
+}
+
+// --- Fetch & Update ---
+async function refreshData() {
+  try {
+    const vRes = await api('GET', '/api/v1/fleet/vehicles');
+    const sRes = await api('GET', '/api/v1/shipments');
+    const vehicles = vRes.data || [];
+    const shipments = sRes.data || [];
+
+    document.getElementById('kpi-total').textContent = vehicles.length;
+    document.getElementById('kpi-enroute').textContent = vehicles.filter(v => v.status === 'en_route').length;
+    document.getElementById('kpi-available').textContent = vehicles.filter(v => v.status === 'available').length;
+    document.getElementById('kpi-shipments').textContent = shipments.length;
+
+    vehicles.forEach(v => { vehicleData[v.id] = v; });
+    shipments.forEach(s => { shipmentData[s.id] = s; });
+
+    renderSidebarList(vehicles, shipments);
+
+    const bounds = [];
+    vehicles.forEach(v => {
+      if (v.current_lat && v.current_lng) {
+        updateMarker(v.id, v.current_lat, v.current_lng, v.current_speed || 0);
+        bounds.push([v.current_lat, v.current_lng]);
+      }
+    });
+
+    // Show shipment origin/dest markers
+    shipmentMarkers.forEach(m => map.removeLayer(m));
+    shipmentMarkers.length = 0;
+    shipments.forEach(s => {
+      if (s.status !== 'delivered' && s.status !== 'cancelled') {
+        const om = L.marker([s.origin_lat, s.origin_lng], { icon: createPinIcon('#22c55e', '📦') }).addTo(map).bindPopup(`📦 Origin: ${s.origin_address}<br>Cargo: ${s.cargo_type}`);
+        const dm = L.marker([s.dest_lat, s.dest_lng], { icon: createPinIcon('#ef4444', '📍') }).addTo(map).bindPopup(`📍 Dest: ${s.dest_address}<br>Cargo: ${s.cargo_type}`);
+        shipmentMarkers.push(om, dm);
+      }
+    });
+
+    if (bounds.length > 0 && !window._hasFitOnce && map && mapReady) {
+      map.invalidateSize();
+      setTimeout(() => { map.fitBounds(bounds, { padding: [50, 50], maxZoom: 12 }); }, 200);
+      window._hasFitOnce = true;
+    }
+  } catch (e) { console.error('Refresh error:', e); }
+}
+
+// --- Filter ---
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  event.target.classList.add('active');
+  // Update filter chips for shipments tab
+  refreshData();
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  const idx = ['vehicles','shipments','analytics','activity'].indexOf(tab);
+  document.querySelectorAll('.tab-btn')[idx].classList.add('active');
+
+  const filterBar = document.getElementById('filter-bar');
+  if (tab === 'vehicles') {
+    document.getElementById('tab-header-title').querySelector('span').textContent = 'Active Vehicles';
+    filterBar.innerHTML = `
+      <span class="filter-chip active" onclick="setFilter('all')">All</span>
+      <span class="filter-chip" onclick="setFilter('available')">Available</span>
+      <span class="filter-chip" onclick="setFilter('en_route')">En Route</span>
+      <span class="filter-chip" onclick="setFilter('idle')">Idle</span>
+      <span class="filter-chip" onclick="setFilter('maintenance')">Maint.</span>`;
+  } else if (tab === 'shipments') {
+    document.getElementById('tab-header-title').querySelector('span').textContent = 'Shipments';
+    filterBar.innerHTML = `
+      <span class="filter-chip active" onclick="setFilter('all')">All</span>
+      <span class="filter-chip" onclick="setFilter('pending')">Pending</span>
+      <span class="filter-chip" onclick="setFilter('allocated')">Allocated</span>
+      <span class="filter-chip" onclick="setFilter('in_transit')">Transit</span>
+      <span class="filter-chip" onclick="setFilter('delivered')">Delivered</span>`;
+  } else if (tab === 'analytics') {
+    document.getElementById('tab-header-title').querySelector('span').textContent = 'Fleet Analytics';
+    filterBar.innerHTML = '';
+    renderAnalytics();
+    return;
+  } else {
+    document.getElementById('tab-header-title').querySelector('span').textContent = 'Activity Log';
+    filterBar.innerHTML = '';
+  }
+  currentFilter = 'all';
+  if (tab === 'activity') { renderActivityLog(); } else { refreshData(); }
+}
+
+async function renderAnalytics() {
+  const container = document.getElementById('sidebar-list');
+  container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">Loading analytics...</div>';
+  try {
+    const res = await api('GET', '/api/v1/shipments/analytics/summary');
+    const d = res.data;
+    const f = d.fleet; const s = d.shipments;
+    const utilPct = f.total > 0 ? Math.round((f.en_route / f.total) * 100) : 0;
+    const delPct = s.total > 0 ? Math.round((s.delivered / s.total) * 100) : 0;
+
+    function donut(pct, color, label) {
+      const r = 30, c = 2 * Math.PI * r, dash = (pct/100)*c;
+      return `<div style="text-align:center">
+        <svg width="76" height="76" viewBox="0 0 76 76">
+          <circle cx="38" cy="38" r="${r}" fill="none" stroke="var(--border)" stroke-width="6"/>
+          <circle cx="38" cy="38" r="${r}" fill="none" stroke="${color}" stroke-width="6" stroke-dasharray="${dash} ${c}" stroke-linecap="round" transform="rotate(-90 38 38)"/>
+          <text x="38" y="42" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="700">${pct}%</text>
+        </svg>
+        <div style="font-size:10px;color:var(--text2);margin-top:2px">${label}</div>
+      </div>`;
+    }
+
+    container.innerHTML = `
+      <div style="padding:14px">
+        <div style="display:flex;justify-content:space-around;margin-bottom:16px">
+          ${donut(utilPct, '#3b82f6', 'Fleet Utilization')}
+          ${donut(delPct, '#22c55e', 'Delivery Rate')}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+          <div style="background:var(--surface2);padding:10px;border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--text2);text-transform:uppercase">Active Routes</div>
+            <div style="font-size:20px;font-weight:700;color:#3b82f6">${f.en_route}</div>
+          </div>
+          <div style="background:var(--surface2);padding:10px;border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--text2);text-transform:uppercase">Available</div>
+            <div style="font-size:20px;font-weight:700;color:#22c55e">${f.available}</div>
+          </div>
+          <div style="background:var(--surface2);padding:10px;border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--text2);text-transform:uppercase">In Transit</div>
+            <div style="font-size:20px;font-weight:700;color:#f59e0b">${s.in_transit}</div>
+          </div>
+          <div style="background:var(--surface2);padding:10px;border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--text2);text-transform:uppercase">Delivered</div>
+            <div style="font-size:20px;font-weight:700;color:#06b6d4">${s.delivered}</div>
+          </div>
+        </div>
+
+        <div style="background:var(--surface2);padding:12px;border-radius:8px;border:1px solid var(--border);margin-bottom:10px">
+          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Fleet Composition</div>
+          ${(d.type_breakdown || []).map(t => {
+            const pct = Math.round((t.count / f.total) * 100);
+            return `<div style="margin-bottom:6px">
+              <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:2px"><span>${t.type.toUpperCase()}</span><span style="color:var(--accent2)">${t.count} (${pct}%)</span></div>
+              <div style="height:4px;background:var(--border);border-radius:2px"><div style="height:100%;width:${pct}%;background:var(--accent);border-radius:2px"></div></div>
+            </div>`;
+          }).join('')}
+        </div>
+
+        <div style="background:var(--surface2);padding:12px;border-radius:8px;border:1px solid var(--border);margin-bottom:10px">
+          <div style="font-size:10px;color:var(--text2);text-transform:uppercase;margin-bottom:8px">Fuel Mix</div>
+          ${(d.fuel_breakdown || []).map(f => {
+            const colors = {diesel:'#f59e0b',petrol:'#ef4444',electric:'#22c55e',cng:'#3b82f6'};
+            return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px">
+              <div style="width:8px;height:8px;border-radius:50%;background:${colors[f.fuel_type]||'#888'}"></div>
+              <span>${f.fuel_type.toUpperCase()}</span>
+              <span style="margin-left:auto;font-weight:700;color:var(--text)">${f.count}</span>
+            </div>`;
+          }).join('')}
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="background:var(--surface2);padding:10px;border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--text2);text-transform:uppercase">Total Cargo</div>
+            <div style="font-size:16px;font-weight:700;color:var(--text)">${(d.total_cargo_weight_kg/1000).toFixed(1)}t</div>
+          </div>
+          <div style="background:var(--surface2);padding:10px;border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--text2);text-transform:uppercase">GPS Events 24h</div>
+            <div style="font-size:16px;font-weight:700;color:var(--accent2)">${d.gps_events_24h}</div>
+          </div>
+          <div style="background:var(--surface2);padding:10px;border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--text2);text-transform:uppercase">Urgent</div>
+            <div style="font-size:16px;font-weight:700;color:#ef4444">${d.urgent_shipments}</div>
+          </div>
+          <div style="background:var(--surface2);padding:10px;border-radius:8px;border:1px solid var(--border)">
+            <div style="font-size:9px;color:var(--text2);text-transform:uppercase">Pending</div>
+            <div style="font-size:16px;font-weight:700;color:#f59e0b">${s.pending}</div>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('list-count').textContent = '📊';
+  } catch(e) { container.innerHTML = '<div style="padding:20px;color:var(--red)">Analytics failed: ' + e.message + '</div>'; }
+}
+
+function renderSidebarList(vehicles, shipments) {
+  const container = document.getElementById('sidebar-list');
+  if (activeTab === 'vehicles') {
+    const filtered = currentFilter === 'all' ? vehicles : vehicles.filter(v => v.status === currentFilter);
+    document.getElementById('list-count').textContent = filtered.length;
+    container.innerHTML = filtered.map(v => `
+      <div class="item-card ${selectedVehicleId === v.id ? 'active' : ''}" onclick="selectVehicle('${v.id}')" id="vi-${v.id}">
+        <div class="row">
+          <span class="title">${v.registration_no}</span>
+          <span class="badge ${v.status}">${v.status.replace('_', ' ')}</span>
+        </div>
+        <div class="meta">
+          <span>📦 ${v.type.toUpperCase()}</span>
+          <span>⚖️ ${v.capacity_kg} kg</span>
+          <span>⛽ ${v.fuel_type}</span>
+          ${v.current_speed ? `<span style="color:var(--green)">🏎️ ${v.current_speed.toFixed(0)} km/h</span>` : ''}
+        </div>
+        ${v.driver_name ? `<div class="meta" style="margin-top:2px"><span>👤 ${v.driver_name}</span></div>` : ''}
+      </div>
+    `).join('') || '<div style="padding:20px; text-align:center; color:var(--text2);">No vehicles match filter</div>';
+  } else if (activeTab === 'shipments') {
+    const filtered = currentFilter === 'all' ? shipments : shipments.filter(s => s.status === currentFilter);
+    document.getElementById('list-count').textContent = filtered.length;
+    container.innerHTML = filtered.map(s => `
+      <div class="item-card" onclick="selectShipment('${s.id}')" id="si-${s.id}">
+        <div class="row">
+          <span class="title">${s.cargo_type}</span>
+          <span class="badge ${s.status}">${s.status.replace('_', ' ')}</span>
+        </div>
+        <div class="meta">
+          <span>⚖️ ${s.weight_kg} kg</span>
+          <span>🔥 ${s.priority.toUpperCase()}</span>
+          ${s.requires_vehicle_type ? `<span>🚛 ${s.requires_vehicle_type}</span>` : ''}
+          ${s.vehicle_reg ? `<span style="color:var(--accent2)">→ ${s.vehicle_reg}</span>` : ''}
+        </div>
+        <div class="meta" style="margin-top:2px">
+          <span>📍 ${s.origin_address} → ${s.dest_address}</span>
+        </div>
+        ${s.tracking_token ? `<div class="eta-label">🔗 Token: ${s.tracking_token.slice(0,12)}...</div>` : ''}
+      </div>
+    `).join('') || '<div style="padding:20px; text-align:center; color:var(--text2);">No shipments match filter</div>';
+  }
+}
+
+function updateMarker(vehicleId, lat, lng, speed) {
+  if (!map) return;
+  const v = vehicleData[vehicleId] || {};
+  const reg = v.registration_no || vehicleId.slice(0, 8);
+  const status = v.status || 'available';
+  const popupHtml = `
+    <div>
+      <h3 style="margin:0 0 4px 0; font-size:14px; color:#6366f1;">🚛 ${reg}</h3>
+      <div style="font-size:12px; color:#9ca3af;">Type: <strong>${v.type || 'medium'}</strong> | Fuel: ${v.fuel_type || '-'}</div>
+      <div style="font-size:12px; color:#9ca3af;">Status: <strong style="color:${statusColors[status]}">${status.replace('_', ' ')}</strong></div>
+      <div style="font-size:12px; color:#9ca3af;">Speed: <strong style="color:#22c55e">${(speed||0).toFixed(0)} km/h</strong></div>
+      <div style="font-size:12px; color:#9ca3af;">Capacity: ${v.capacity_kg || 0} kg</div>
+      ${v.driver_name ? `<div style="font-size:12px; color:#9ca3af;">Driver: ${v.driver_name}</div>` : ''}
+    </div>`;
+  if (markers[vehicleId]) {
+    markers[vehicleId].setLatLng([lat, lng]);
+    markers[vehicleId].setIcon(createMarkerIcon(status));
+    markers[vehicleId].setPopupContent(popupHtml);
+  } else {
+    markers[vehicleId] = L.marker([lat, lng], { icon: createMarkerIcon(status) }).addTo(map).bindPopup(popupHtml);
+  }
+}
+
+// --- Selection ---
+async function selectVehicle(id) {
+  selectedVehicleId = id;
+  document.querySelectorAll('.item-card').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById('vi-' + id);
+  if (el) el.classList.add('active');
+  const v = vehicleData[id];
+  if (v && v.current_lat && v.current_lng && map) {
+    map.flyTo([v.current_lat, v.current_lng], 13, { duration: 0.8 });
+    if (markers[id]) markers[id].openPopup();
+  }
+  const bp = document.getElementById('bottom-panel');
+  bp.style.display = 'flex';
+  document.getElementById('bp-reg').textContent = v?.registration_no || '-';
+  document.getElementById('bp-type').textContent = (v?.type || '-') + ' / ' + (v?.fuel_type || '-');
+  document.getElementById('bp-status').textContent = (v?.status || '-').replace('_', ' ').toUpperCase();
+  document.getElementById('bp-speed').textContent = (v?.current_speed || 0).toFixed(0) + ' km/h';
+  document.getElementById('bp-action-box').style.display = 'none';
+
+  // Show ETA if vehicle has active shipment
+  const activeShipment = Object.values(shipmentData).find(s => s.assigned_vehicle === id && s.status !== 'delivered');
+  if (activeShipment) {
+    document.getElementById('bp-route-box').style.display = 'flex';
+    document.getElementById('bp-route-btn').onclick = () => showRouteAlternatives(v.current_lat, v.current_lng, activeShipment.dest_lat, activeShipment.dest_lng);
+    drawRouteLine(activeShipment.origin_lat, activeShipment.origin_lng, activeShipment.dest_lat, activeShipment.dest_lng);
+    try {
+      const etaRes = await api('GET', `/api/v1/shipments/${activeShipment.id}/eta`);
+      document.getElementById('bp-eta').textContent = etaRes.data.eta_minutes ? etaRes.data.eta_minutes + ' min' : '-';
+    } catch(e) { document.getElementById('bp-eta').textContent = '-'; }
+  } else {
+    document.getElementById('bp-eta').textContent = 'N/A';
+    document.getElementById('bp-route-box').style.display = 'none';
+    if (activeRoutePolyline) { map.removeLayer(activeRoutePolyline); activeRoutePolyline = null; }
+  }
+
+  // Load GPS trail if active
+  if (trailActive) loadGPSTrail(id);
+}
+
+async function selectShipment(id) {
+  document.querySelectorAll('.item-card').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById('si-' + id);
+  if (el) el.classList.add('active');
+  const s = shipmentData[id];
+  if (!s) return;
+  if (map) map.flyTo([s.origin_lat, s.origin_lng], 12, { duration: 0.8 });
+  const bp = document.getElementById('bottom-panel');
+  bp.style.display = 'flex';
+  document.getElementById('bp-reg').textContent = s.cargo_type;
+  document.getElementById('bp-type').textContent = s.origin_address + ' → ' + s.dest_address;
+  document.getElementById('bp-status').textContent = s.status.replace('_', ' ').toUpperCase();
+  document.getElementById('bp-speed').textContent = s.weight_kg + ' kg';
+
+  try {
+    const etaRes = await api('GET', `/api/v1/shipments/${s.id}/eta`);
+    document.getElementById('bp-eta').textContent = etaRes.data.eta_minutes ? etaRes.data.eta_minutes + ' min' : 'N/A';
+  } catch(e) { document.getElementById('bp-eta').textContent = 'N/A'; }
+
+  const actionBox = document.getElementById('bp-action-box');
+  const actionBtn = document.getElementById('bp-action-btn');
+  const routeBox = document.getElementById('bp-route-box');
+  actionBox.style.display = 'flex';
+  const nextStatus = getNextStatus(s.status);
+  if (nextStatus) {
+    actionBtn.textContent = `→ ${nextStatus.replace('_', ' ').toUpperCase()}`;
+    actionBtn.onclick = () => advanceShipmentStatus(s.id, nextStatus);
+  } else { actionBox.style.display = 'none'; }
+  
+  if (s.status !== 'delivered' && s.status !== 'cancelled' && s.assigned_vehicle && vehicleData[s.assigned_vehicle]) {
+    const v = vehicleData[s.assigned_vehicle];
+    routeBox.style.display = 'flex';
+    document.getElementById('bp-route-btn').onclick = () => showRouteAlternatives(v.current_lat, v.current_lng, s.dest_lat, s.dest_lng);
+  } else {
+    routeBox.style.display = 'none';
+  }
+
+  drawRouteLine(s.origin_lat, s.origin_lng, s.dest_lat, s.dest_lng);
+}
+
+function getNextStatus(c) { return { pending:'allocated', allocated:'picked_up', picked_up:'in_transit', in_transit:'delivered' }[c] || null; }
+
+async function advanceShipmentStatus(id, status) {
+  try {
+    await api('PUT', `/api/v1/shipments/${id}/status`, { status });
+    showToast('📦', 'Status Updated', `Shipment → ${status.replace('_',' ')}`);
+    refreshData();
+  } catch (e) { alert('Status update failed: ' + e.message); }
+}
+
+function hideBottomPanel() { document.getElementById('bottom-panel').style.display = 'none'; selectedVehicleId = null; }
+
+// --- Routes ---
+async function drawRouteLine(oLat, oLng, dLat, dLng) {
+  if (!map) return;
+  try {
+    const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${oLng},${oLat};${dLng},${dLat}?overview=full&geometries=geojson`);
+    const data = await res.json();
+    if (data.routes && data.routes.length > 0) {
+      if (activeRoutePolyline) map.removeLayer(activeRoutePolyline);
+      activeRoutePolyline = L.geoJSON(data.routes[0].geometry, {
+        style: { color: '#818cf8', weight: 5, opacity: 0.85, dashArray: '8, 8' }
+      }).addTo(map);
+    }
+  } catch (e) { console.warn('Route fetch failed:', e); }
+}
+
+async function showAllRoutes() {
+  allRoutePolylines.forEach(p => map.removeLayer(p));
+  allRoutePolylines = [];
+  const shipments = Object.values(shipmentData).filter(s => !['delivered','cancelled','pending'].includes(s.status));
+  for (const s of shipments) {
+    try {
+      const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${s.origin_lng},${s.origin_lat};${s.dest_lng},${s.dest_lat}?overview=full&geometries=geojson`);
+      const data = await res.json();
+      if (data.routes?.length > 0) {
+        const colors = ['#818cf8','#f59e0b','#22c55e','#ef4444','#06b6d4','#ec4899'];
+        const poly = L.geoJSON(data.routes[0].geometry, {
+          style: { color: colors[allRoutePolylines.length % colors.length], weight: 4, opacity: 0.7, dashArray: '6, 6' }
+        }).addTo(map);
+        allRoutePolylines.push(poly);
+      }
+    } catch(e) {}
+  }
+  showToast('🗺️', 'Routes Rendered', `${allRoutePolylines.length} active routes on map`);
+}
+
+// --- GPS Trail ---
+async function toggleGPSTrail() {
+  trailActive = !trailActive;
+  document.getElementById('trail-btn').style.background = trailActive ? 'var(--accent)' : '';
+  document.getElementById('trail-btn').style.color = trailActive ? 'white' : '';
+  if (!trailActive && trailLayer) { map.removeLayer(trailLayer); trailLayer = null; }
+  if (trailActive && selectedVehicleId) loadGPSTrail(selectedVehicleId);
+}
+
+async function loadGPSTrail(vehicleId) {
+  if (trailLayer) { map.removeLayer(trailLayer); trailLayer = null; }
+  try {
+    const res = await api('GET', `/api/v1/fleet/vehicles/${vehicleId}/history?limit=200`);
+    const points = (res.data || []).map(p => [p.lat, p.lng]).reverse();
+    if (points.length > 1) {
+      trailLayer = L.polyline(points, { color: '#6366f1', weight: 3, opacity: 0.6 }).addTo(map);
+      showToast('📡', 'GPS Trail Loaded', `${points.length} points for ${vehicleData[vehicleId]?.registration_no || 'vehicle'}`);
+    }
+  } catch(e) { console.warn('Trail fetch failed', e); }
+}
+
+// --- Socket ---
+function initSocket() {
+  if (socket) return;
+  socket = io({ transports: ['websocket', 'polling'] });
+  socket.on('connect', () => {
+    console.log('⚡ Socket connected');
+    socket.emit('subscribe:fleet');
+    showToast('⚡', 'Socket Connected', 'Real-time GPS feed active');
+  });
+  socket.on('vehicle:update', (data) => {
+    updateMarker(data.vehicleId, data.lat, data.lng, data.speed, data.heading);
+    const v = vehicleData[data.vehicleId];
+    if (v) { v.current_lat = data.lat; v.current_lng = data.lng; v.current_speed = data.speed; }
+    if (selectedVehicleId === data.vehicleId) {
+      document.getElementById('bp-speed').textContent = (data.speed || 0).toFixed(0) + ' km/h';
+    }
+  });
+  socket.on('shipment:status_update', (data) => {
+    showToast('📦', 'Shipment Update', `Status changed to ${data.status}`);
+    refreshData();
+  });
+}
+
+// --- Actions ---
+async function autoAllocate() {
+  try {
+    const res = await api('POST', '/api/v1/allocation/auto');
+    showToast('⚡', 'AI Allocation', `Matched ${res.data.allocated} shipments to vehicles`);
+    refreshData();
+  } catch (e) { alert('Allocation Error: ' + e.message); }
+}
+
+// --- Modals ---
+function openNewShipmentModal() { document.getElementById('shipment-modal').classList.add('active'); }
+function closeNewShipmentModal() { document.getElementById('shipment-modal').classList.remove('active'); }
+function openNewVehicleModal() { document.getElementById('vehicle-modal').classList.add('active'); }
+function openRouteModal() { document.getElementById('route-modal').classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+async function submitNewShipment(e) {
+  e.preventDefault();
+  const body = {
+    cargo_type: document.getElementById('m-cargo').value,
+    weight_kg: parseFloat(document.getElementById('m-weight').value),
+    requires_vehicle_type: document.getElementById('m-req').value || null,
+    origin_address: document.getElementById('m-oaddr').value,
+    origin_lat: parseFloat(document.getElementById('m-olat').value),
+    origin_lng: parseFloat(document.getElementById('m-olng').value),
+    dest_address: document.getElementById('m-daddr').value,
+    dest_lat: parseFloat(document.getElementById('m-dlat').value),
+    dest_lng: parseFloat(document.getElementById('m-dlng').value),
+    priority: document.getElementById('m-priority').value,
+    special_instructions: document.getElementById('m-instructions').value || null
+  };
+  try {
+    const res = await api('POST', '/api/v1/shipments', body);
+    closeNewShipmentModal();
+    showToast('📦', 'Shipment Created', `${body.cargo_type} — Token: ${res.data.tracking_token.slice(0,12)}...`);
+    switchTab('shipments');
+  } catch (err) { alert('Creation failed: ' + err.message); }
+}
+
+async function submitNewVehicle(e) {
+  e.preventDefault();
+  const body = {
+    registration_no: document.getElementById('v-reg').value,
+    type: document.getElementById('v-type').value,
+    fuel_type: document.getElementById('v-fuel').value,
+    capacity_kg: parseFloat(document.getElementById('v-cap').value),
+    current_lat: parseFloat(document.getElementById('v-lat').value) || null,
+    current_lng: parseFloat(document.getElementById('v-lng').value) || null
+  };
+  try {
+    await api('POST', '/api/v1/fleet/vehicles', body);
+    closeModal('vehicle-modal');
+    showToast('🚛', 'Vehicle Registered', body.registration_no);
+    switchTab('vehicles');
+  } catch (err) { alert('Registration failed: ' + err.message); }
+}
+
+async function computeRoute(e) {
+  e.preventDefault();
+  const oLat = parseFloat(document.getElementById('r-olat').value);
+  const oLng = parseFloat(document.getElementById('r-olng').value);
+  const dLat = parseFloat(document.getElementById('r-dlat').value);
+  const dLng = parseFloat(document.getElementById('r-dlng').value);
+  try {
+    const res = await api('POST', '/api/v1/routes/compute', {
+      origin_lat: oLat, origin_lng: oLng, dest_lat: dLat, dest_lng: dLng
+    });
+    const r = res.data;
+    document.getElementById('route-result').style.display = 'block';
+    document.getElementById('route-info').innerHTML = `
+      <strong>Distance:</strong> ${r.distance_km?.toFixed(1)} km<br>
+      <strong>Estimated Time:</strong> ${(r.estimated_hours * 60).toFixed(0)} min<br>
+      <strong>Source:</strong> ${r.source}
+    `;
+    drawRouteLine(oLat, oLng, dLat, dLng);
+    showToast('🗺️', 'Route Computed', `${r.distance_km?.toFixed(1)} km via ${r.source}`);
+  } catch (err) { alert('Route failed: ' + err.message); }
+}
+
+// --- Manual Assignment ---
+function openAssignModal() {
+  // Populate dropdowns
+  const shipSel = document.getElementById('a-shipment');
+  const vehSel = document.getElementById('a-vehicle');
+  const pendingShipments = Object.values(shipmentData).filter(s => s.status === 'pending' || s.status === 'allocated');
+  const availVehicles = Object.values(vehicleData);
+
+  shipSel.innerHTML = pendingShipments.map(s =>
+    `<option value="${s.id}">${s.cargo_type} — ${s.weight_kg}kg (${s.status}) ${s.requires_vehicle_type ? '[Needs: '+s.requires_vehicle_type+']' : ''}</option>`
+  ).join('') || '<option>No pending shipments</option>';
+
+  vehSel.innerHTML = availVehicles.map(v =>
+    `<option value="${v.id}">${v.registration_no} — ${v.type} (${v.capacity_kg}kg) [${v.status}]</option>`
+  ).join('');
+
+  // Compatibility check on change
+  const checkCompat = () => {
+    const sid = shipSel.value;
+    const vid = vehSel.value;
+    const s = shipmentData[sid];
+    const v = vehicleData[vid];
+    const box = document.getElementById('assign-compat');
+    if (!s || !v) { box.style.display = 'none'; return; }
+    box.style.display = 'block';
+    const issues = [];
+    if (s.weight_kg > v.capacity_kg) issues.push(`⚠️ Overweight: ${s.weight_kg}kg > ${v.capacity_kg}kg capacity`);
+    if (s.requires_vehicle_type && s.requires_vehicle_type !== v.type) issues.push(`⚠️ Type mismatch: needs ${s.requires_vehicle_type}, vehicle is ${v.type}`);
+    if (v.status === 'en_route') issues.push('⚠️ Vehicle already en route');
+    if (issues.length === 0) {
+      box.innerHTML = '✅ Compatible — ' + v.registration_no + ' can carry ' + s.cargo_type + ' (' + s.weight_kg + 'kg / ' + v.capacity_kg + 'kg capacity)';
+      box.style.color = '#22c55e';
+    } else {
+      box.innerHTML = issues.join('<br>');
+      box.style.color = '#ef4444';
+    }
+  };
+  shipSel.onchange = checkCompat;
+  vehSel.onchange = checkCompat;
+  checkCompat();
+
+  document.getElementById('assign-modal').classList.add('active');
+}
+
+async function submitAssign(e) {
+  e.preventDefault();
+  const shipmentId = document.getElementById('a-shipment').value;
+  const vehicleId = document.getElementById('a-vehicle').value;
+  try {
+    await api('POST', '/api/v1/allocation/manual', { shipment_id: shipmentId, vehicle_id: vehicleId });
+    closeModal('assign-modal');
+    const s = shipmentData[shipmentId];
+    const v = vehicleData[vehicleId];
+    showToast('🔗', 'Manual Assignment', `${s?.cargo_type || 'Shipment'} → ${v?.registration_no || 'Vehicle'}`);
+    refreshData();
+  } catch (err) {
+    alert('Assignment failed: ' + err.message);
+  }
+}
+
+// --- Geofence Circles ---
+let geofenceCircles = [];
+let geofenceActive = false;
+
+function toggleGeofences() {
+  geofenceActive = !geofenceActive;
+  const btn = document.getElementById('geo-btn');
+  btn.style.background = geofenceActive ? 'var(--accent)' : '';
+  btn.style.color = geofenceActive ? 'white' : '';
+
+  if (!geofenceActive) {
+    geofenceCircles.forEach(c => map.removeLayer(c));
+    geofenceCircles = [];
+    return;
+  }
+
+  // Draw circles around shipment origins (green) and destinations (red)
+  Object.values(shipmentData).forEach(s => {
+    if (s.status === 'delivered' || s.status === 'cancelled') return;
+    const originCircle = L.circle([s.origin_lat, s.origin_lng], {
+      radius: 2000, color: '#22c55e', fillColor: '#22c55e', fillOpacity: 0.08, weight: 1, dashArray: '5, 5'
+    }).addTo(map).bindPopup(`🟢 Pickup Zone: ${s.origin_address}<br>Cargo: ${s.cargo_type}`);
+    const destCircle = L.circle([s.dest_lat, s.dest_lng], {
+      radius: 2000, color: '#ef4444', fillColor: '#ef4444', fillOpacity: 0.08, weight: 1, dashArray: '5, 5'
+    }).addTo(map).bindPopup(`🔴 Delivery Zone: ${s.dest_address}<br>Cargo: ${s.cargo_type}`);
+    geofenceCircles.push(originCircle, destCircle);
+  });
+  showToast('⭕', 'Geofences Active', `${geofenceCircles.length / 2} zones rendered on map`);
+}
+
+// --- Fuel Stations (Real via Overpass) ---
+let fuelStationsLayer = null;
+let fuelActive = false;
+
+async function toggleFuelStations() {
+  fuelActive = !fuelActive;
+  const btn = document.getElementById('fuel-btn');
+  btn.style.background = fuelActive ? 'var(--accent)' : '';
+  btn.style.color = fuelActive ? 'white' : '';
+
+  if (!fuelActive) {
+    if (fuelStationsLayer) { map.removeLayer(fuelStationsLayer); fuelStationsLayer = null; }
+    return;
+  }
+
+  showToast('⛽', 'Loading Fuel Stations', 'Fetching real petrol pumps from OpenStreetMap...');
+  
+  const bounds = map.getBounds();
+  const query = `
+    [out:json][timeout:25];
+    node["amenity"="fuel"](${bounds.getSouth()},${bounds.getWest()},${bounds.getNorth()},${bounds.getEast()});
+    out body;
+  `;
+  try {
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(query)
+    });
+    const data = await res.json();
+    
+    if (fuelStationsLayer) map.removeLayer(fuelStationsLayer);
+    
+    fuelStationsLayer = L.layerGroup().addTo(map);
+    data.elements.forEach(node => {
+      const name = node.tags.name || node.tags.brand || 'Fuel Station';
+      const op = node.tags.opening_hours ? `<br>Hours: ${node.tags.opening_hours}` : '';
+      L.marker([node.lat, node.lon], { icon: createPinIcon('#f59e0b', '⛽') })
+        .bindPopup(`<strong>${name}</strong>${op}`)
+        .addTo(fuelStationsLayer);
+    });
+    
+    showToast('⛽', 'Fuel Stations Loaded', `Found ${data.elements.length} stations in view`);
+  } catch(e) {
+    showToast('❌', 'Error', 'Failed to fetch fuel stations');
+    toggleFuelStations(); // toggle back off
+  }
+}
+
+// --- Route Alternatives Picker ---
+let altRoutesLayer = null;
+
+async function showRouteAlternatives(oLat, oLng, dLat, dLng) {
+  if (!oLat || !oLng || !dLat || !dLng) {
+    showToast('❌', 'Error', 'Cannot calculate routes: missing location data.');
+    return;
+  }
+
+  document.getElementById('route-picker').style.display = 'block';
+  document.getElementById('route-options').innerHTML = '<div style="color:var(--text2);font-size:12px;text-align:center">Fetching alternatives...</div>';
+
+  try {
+    // Request alternatives from OSRM
+    const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${oLng},${oLat};${dLng},${dLat}?overview=full&geometries=geojson&alternatives=3`);
+    const data = await res.json();
+    
+    if (altRoutesLayer) map.removeLayer(altRoutesLayer);
+    altRoutesLayer = L.layerGroup().addTo(map);
+    
+    if (data.routes && data.routes.length > 0) {
+      const colors = ['#3b82f6', '#f59e0b', '#ec4899'];
+      let html = '';
+      
+      data.routes.forEach((r, idx) => {
+        const dist = (r.distance / 1000).toFixed(1);
+        const mins = Math.round(r.duration / 60);
+        const color = colors[idx % colors.length];
+        
+        const poly = L.geoJSON(r.geometry, {
+          style: { color: color, weight: idx === 0 ? 6 : 4, opacity: idx === 0 ? 0.9 : 0.6 }
+        }).addTo(altRoutesLayer);
+
+        html += `
+          <div onclick="selectRouteAlt(${idx})" style="padding:10px; margin-bottom:8px; background:var(--surface2); border:1px solid ${color}; border-radius:6px; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='var(--surface)'" onmouseout="this.style.background='var(--surface2)'">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <strong style="color:${color}">Route Option ${idx + 1}</strong>
+              <span style="font-size:12px; font-weight:700; color:var(--text);">${mins} min</span>
+            </div>
+            <div style="font-size:11px; color:var(--text2); margin-top:4px;">Distance: ${dist} km</div>
+          </div>
+        `;
+      });
+      document.getElementById('route-options').innerHTML = html;
+      
+      // Hide the default active route line if it exists to avoid clutter
+      if (activeRoutePolyline) map.removeLayer(activeRoutePolyline);
+    } else {
+      document.getElementById('route-options').innerHTML = '<div style="color:var(--red);font-size:12px;">No alternative routes found.</div>';
+    }
+  } catch (e) {
+    document.getElementById('route-options').innerHTML = '<div style="color:var(--red);font-size:12px;">Failed to load routes</div>';
+  }
+}
+
+function selectRouteAlt(idx) {
+  showToast('🛣️', 'Route Selected', `Truck will follow Route Option ${idx+1}`);
+  closeRoutePicker();
+  
+  // Re-fetch the default route for simplicity, or we could save the selected polyline
+  // but just refreshing data will redraw the default route which is fine for UI demo
+  setTimeout(refreshData, 500); 
+}
+
+function closeRoutePicker() {
+  document.getElementById('route-picker').style.display = 'none';
+  if (altRoutesLayer) {
+    map.removeLayer(altRoutesLayer);
+    altRoutesLayer = null;
+  }
+}
+
+// --- Auto-refresh every 15 seconds ---
+setInterval(refreshData, 15000);
+
+// --- Bootstrap ---
+window.addEventListener('load', () => {
+  // Set user name from session
+  const nameEl = document.getElementById('user-name');
+  if (nameEl) nameEl.textContent = (_user.name || 'User') + ' (' + (_user.role || '?') + ')';
+
+  initMap();
+  initSocket();
+  refreshData();
+  addActivity('🚀 FleetOS initialized · Logged in as ' + (_user.name || 'User'));
+});
+</script>
+</body>
+</html>
