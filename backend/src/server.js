@@ -101,6 +101,20 @@ const PORT = process.env.PORT || 3000;
 
 async function start() {
   await getDb(); // Initialize SQLite
+  
+  // Auto-seed if database is freshly created (e.g. on cloud deploy)
+  try {
+    const { get } = require('./config/database');
+    const userCount = get('SELECT COUNT(*) as count FROM users');
+    if (!userCount || userCount.count === 0) {
+      console.log('📦 Empty database detected — seeding initial demo data...');
+      const { seed } = require('./seeds/seed');
+      await seed();
+    }
+  } catch (err) {
+    console.warn('Auto-seed check failed:', err.message);
+  }
+
   socketManager.init(server);
   server.listen(PORT, () => console.log(`\n🚛 FleetOS API running on http://localhost:${PORT}\n`));
 }

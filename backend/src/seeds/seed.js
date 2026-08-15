@@ -119,4 +119,8 @@ async function seed() {
   console.log(`🔑 All passwords: password123\n`);
 }
 
-seed().catch(console.error);
+module.exports = { seed };
+
+if (require.main === module) {
+  seed().catch(console.error);
+}
