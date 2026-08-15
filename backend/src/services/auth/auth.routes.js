@@ -272,24 +272,60 @@ router.post('/otp/verify', (req, res) => {
   res.json({ success: true, data: { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } } });
 });
 
+// Helper: Verify Google Token (Firebase Admin or Google OAuth API fallback)
+async function verifyGoogleToken(idToken) {
+  if (firebaseAuth) {
+    try {
+      const decoded = await firebaseAuth.verifyIdToken(idToken);
+      if (decoded && decoded.email) return decoded;
+    } catch (e) {
+      console.warn('Firebase Admin token verification failed, attempting Google OAuth API fallback:', e.message);
+    }
+  }
+
+  // Fallback to Google OAuth tokeninfo public endpoint
+  const axios = require('axios');
+  const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`, { timeout: 8000 });
+  const data = response.data;
+  if (data && data.email) {
+    return {
+      email: data.email,
+      name: data.name || data.email.split('@')[0],
+      uid: data.sub
+    };
+  }
+  throw new Error('Could not verify Google ID token with Google services.');
+}
+
 // =====================================================================
 // POST /google — Google OAuth via Firebase ID Token (no OTP needed)
 // =====================================================================
 router.post('/google', async (req, res) => {
   const { idToken, selectedRole } = req.body;
-  if (!idToken || !selectedRole) return res.status(400).json({ success: false, error: { message: 'Google token and selected role are required.' } });
-  if (!firebaseAuth) return res.status(500).json({ success: false, error: { message: 'Google authentication is not configured on this server.' } });
+  if (!idToken || !selectedRole) {
+    return res.status(400).json({ success: false, error: { message: 'Google token and selected role are required.' } });
+  }
 
   try {
-    const decoded = await firebaseAuth.verifyIdToken(idToken);
-    if (!decoded.email) return res.status(400).json({ success: false, error: { message: 'Google account is missing an email address.' } });
+    const decoded = await verifyGoogleToken(idToken);
+    if (!decoded.email) {
+      return res.status(400).json({ success: false, error: { message: 'Google account is missing an email address.' } });
+    }
 
     let user = get('SELECT id, name, email, role, is_active FROM users WHERE email = ?', [decoded.email]);
 
     if (!user) {
+      // Disallow self-registering as Administrator via Google OAuth
+      if (selectedRole === 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: { message: 'Administrator registration is disabled. Please contact the system owner.' }
+        });
+      }
+
       // New user signup via Google — default to selectedRole
       const id = uuid();
-      const validRole = ['admin', 'dispatcher', 'driver', 'client'].includes(selectedRole) ? selectedRole : 'dispatcher';
+      const validRole = ['dispatcher', 'driver', 'client'].includes(selectedRole) ? selectedRole : 'dispatcher';
       const name = decoded.name || decoded.email.split('@')[0];
 
       run(
@@ -317,7 +353,7 @@ router.post('/google', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Google Auth verification failed:', err);
+    console.error('Google Auth verification failed:', err.message);
     res.status(401).json({ success: false, error: { message: 'Google authentication failed. Please try again.' } });
   }
 });
