@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
-import { apiGet, apiPut, apiPost, type Vehicle, type Shipment } from '../lib/api';
+import { API_BASE, parseJsonResponse, apiGet, apiPut, apiPost, type Vehicle, type Shipment } from '../lib/api';
 import {
   Truck,
   Package,
@@ -149,12 +149,12 @@ export default function DriverWorkspace() {
 
     const token = sessionStorage.getItem('fleetToken');
     try {
-      const res = await fetch(`/api/v1/shipments/${activeShipment.id}/pod`, {
+      const res = await fetch(`${API_BASE}/api/v1/shipments/${activeShipment.id}/pod`, {
         method: 'POST',
         headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: formData
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (data.success) {
         showToast('Proof of delivery attached successfully');
         setPodFile(null);

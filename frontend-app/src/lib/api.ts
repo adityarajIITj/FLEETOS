@@ -1,4 +1,16 @@
-const API_BASE = '';
+export const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+
+export async function parseJsonResponse(res: Response) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    if (!res.ok) {
+      throw new Error(`Server error (${res.status}). Backend API might be offline.`);
+    }
+    throw new Error('Backend API not reachable. Please verify your backend server is active.');
+  }
+}
 
 export async function api<T = any>(
   method: string,
@@ -24,7 +36,7 @@ export async function api<T = any>(
     throw new Error('Session expired');
   }
 
-  const data = await res.json();
+  const data = await parseJsonResponse(res);
   if (!data.success) {
     throw new Error(data.error?.message || 'API error');
   }

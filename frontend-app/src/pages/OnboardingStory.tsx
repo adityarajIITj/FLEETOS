@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { signInWithGoogle } from '../lib/firebase';
+import { API_BASE, parseJsonResponse } from '../lib/api';
 
 interface OnboardingStoryProps {
   onComplete: () => void;
@@ -124,7 +125,7 @@ export default function OnboardingStory({ onComplete }: OnboardingStoryProps) {
 
     setAuthLoading(true);
     try {
-      const endpoint = isSignUp ? '/api/v1/auth/register' : '/api/v1/auth/login';
+      const endpoint = isSignUp ? `${API_BASE}/api/v1/auth/register` : `${API_BASE}/api/v1/auth/login`;
       const body = isSignUp ? { name, email, password, selectedRole } : { email, password, selectedRole };
 
       const res = await fetch(endpoint, {
@@ -132,7 +133,7 @@ export default function OnboardingStory({ onComplete }: OnboardingStoryProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
 
       if (data.success && data.data?.requiresOtp) {
         // Password verified/Account created, OTP sent — move to OTP phase
@@ -160,12 +161,12 @@ export default function OnboardingStory({ onComplete }: OnboardingStoryProps) {
     setAuthError('');
     setAuthLoading(true);
     try {
-      const res = await fetch('/api/v1/auth/otp/verify', {
+      const res = await fetch(`${API_BASE}/api/v1/auth/otp/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code: otpCode, selectedRole }),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
 
       if (data.success) {
         login(data.data.token, data.data.user);
@@ -186,12 +187,12 @@ export default function OnboardingStory({ onComplete }: OnboardingStoryProps) {
     setAuthError('');
     setAuthLoading(true);
     try {
-      const res = await fetch('/api/v1/auth/otp/send', {
+      const res = await fetch(`${API_BASE}/api/v1/auth/otp/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (data.success) {
         setOtpCooldown(60);
       } else {
@@ -210,12 +211,12 @@ export default function OnboardingStory({ onComplete }: OnboardingStoryProps) {
     setAuthLoading(true);
     try {
       const { idToken } = await signInWithGoogle();
-      const res = await fetch('/api/v1/auth/google', {
+      const res = await fetch(`${API_BASE}/api/v1/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken, selectedRole }),
       });
-      const data = await res.json();
+      const data = await parseJsonResponse(res);
       if (data.success) {
         login(data.data.token, data.data.user);
         setCurrentStep('immersion');
