@@ -146,6 +146,18 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ success: false, error: { message: 'This account uses Google sign-in. Please use "Continue with Google" instead.' } });
   }
 
+  // Client role gets instant access (no OTP)
+  if (user.role === 'client' || selectedRole === 'client') {
+    const token = signToken({ id: user.id, email: user.email, role: user.role });
+    return res.json({
+      success: true,
+      data: {
+        token,
+        user: { id: user.id, name: user.name, email: user.email, role: user.role }
+      }
+    });
+  }
+
   // Password verified — now send OTP
   try {
     const result = await generateAndSendOtp(email);
@@ -201,6 +213,19 @@ router.post('/register', async (req, res) => {
       'INSERT INTO users (id, name, email, password, role, is_active) VALUES (?, ?, ?, ?, ?, 1)',
       [id, name, email, hash, validRole]
     );
+
+    // Client role gets instant access (no OTP)
+    if (validRole === 'client') {
+      const user = get('SELECT id, name, email, role FROM users WHERE id = ?', [id]);
+      const token = signToken({ id: user.id, email: user.email, role: user.role });
+      return res.json({
+        success: true,
+        data: {
+          token,
+          user: { id: user.id, name: user.name, email: user.email, role: user.role }
+        }
+      });
+    }
 
     // Account created — now send OTP
     const result = await generateAndSendOtp(email);

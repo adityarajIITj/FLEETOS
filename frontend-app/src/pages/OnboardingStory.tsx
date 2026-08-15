@@ -135,7 +135,11 @@ export default function OnboardingStory({ onComplete }: OnboardingStoryProps) {
       });
       const data = await parseJsonResponse(res);
 
-      if (data.success && data.data?.requiresOtp) {
+      if (data.success && data.data?.token) {
+        // Instant access (e.g. client role) — no OTP needed
+        login(data.data.token, data.data.user);
+        setCurrentStep('immersion');
+      } else if (data.success && data.data?.requiresOtp) {
         // Password verified/Account created, OTP sent — move to OTP phase
         setAuthPhase('otp');
         setOtpCooldown(60);
