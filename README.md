@@ -16,7 +16,7 @@ Real-time fleet visibility · Driver–vehicle allocation · Shipment lifecycle 
 
 <p>
 <b>Smart India Hackathon 2026 · PS2 · Software-based Solution</b><br>
-<b>Team: CEDAR</b>
+<b>Team: CEDAR</b><br>
 <b>Indian Institute of Technology Jodhpur</b>
 </p>
 
