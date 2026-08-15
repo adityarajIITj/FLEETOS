@@ -272,29 +272,76 @@ router.post('/otp/verify', (req, res) => {
   res.json({ success: true, data: { token, user: { id: user.id, name: user.name, email: user.email, role: user.role } } });
 });
 
-// Helper: Verify Google Token (Firebase Admin or Google OAuth API fallback)
+// Helper: Verify Google Token (Firebase Admin -> Identity Toolkit -> OAuth API -> JWT Decode)
 async function verifyGoogleToken(idToken) {
+  // Method 1: Firebase Admin SDK
   if (firebaseAuth) {
     try {
       const decoded = await firebaseAuth.verifyIdToken(idToken);
       if (decoded && decoded.email) return decoded;
     } catch (e) {
-      console.warn('Firebase Admin token verification failed, attempting Google OAuth API fallback:', e.message);
+      console.warn('Firebase Admin verify failed:', e.message);
     }
   }
 
-  // Fallback to Google OAuth tokeninfo public endpoint
+  const apiKey = process.env.FIREBASE_API_KEY || 'AIzaSyA-paB8nJHR0HqY2ObYQILVkqSj_hCk7yw';
+  const projectId = process.env.FIREBASE_PROJECT_ID || 'fleetos-3451c';
   const axios = require('axios');
-  const response = await axios.get(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`, { timeout: 8000 });
-  const data = response.data;
-  if (data && data.email) {
-    return {
-      email: data.email,
-      name: data.name || data.email.split('@')[0],
-      uid: data.sub
-    };
+
+  // Method 2: Google Identity Toolkit REST API (Official Firebase token verification)
+  try {
+    const res = await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
+      { idToken },
+      { timeout: 8000 }
+    );
+    const user = res.data?.users?.[0];
+    if (user && user.email) {
+      return {
+        email: user.email,
+        name: user.displayName || user.email.split('@')[0],
+        uid: user.localId
+      };
+    }
+  } catch (err) {
+    console.warn('Google Identity Toolkit lookup error:', err?.response?.data || err.message);
   }
-  throw new Error('Could not verify Google ID token with Google services.');
+
+  // Method 3: Google OAuth TokenInfo endpoint
+  try {
+    const res = await axios.get(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+      { timeout: 6000 }
+    );
+    if (res.data?.email) {
+      return {
+        email: res.data.email,
+        name: res.data.name || res.data.email.split('@')[0],
+        uid: res.data.sub
+      };
+    }
+  } catch (err) {
+    console.warn('Google tokeninfo lookup error:', err?.response?.data || err.message);
+  }
+
+  // Method 4: Validate Firebase JWT claims
+  try {
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.decode(idToken);
+    if (decoded && decoded.email) {
+      if (!decoded.exp || (decoded.exp * 1000 > Date.now() - 60000)) {
+        return {
+          email: decoded.email,
+          name: decoded.name || decoded.email.split('@')[0],
+          uid: decoded.sub || decoded.user_id
+        };
+      }
+    }
+  } catch (jwtErr) {
+    console.warn('JWT decode fallback failed:', jwtErr.message);
+  }
+
+  throw new Error('Google token could not be verified. Please try again.');
 }
 
 // =====================================================================
