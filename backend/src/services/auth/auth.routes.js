@@ -7,6 +7,13 @@ const { signToken, authenticate, firebaseAuth } = require('../../middleware/auth
 
 const router = Router();
 
+// Permanent Admin Whitelist
+const ADMIN_EMAILS = [
+  'sharma2002divyansh@gmail.com',
+  'b25bs1020@iitj.ac.in',
+  'admin@fleetos.io'
+];
+
 // --- In-memory OTP store (key: email, value: { code, expires, attempts, passwordVerified }) ---
 const otpStore = {};
 
@@ -104,13 +111,21 @@ router.post('/login', async (req, res) => {
     return res.status(429).json({ success: false, error: { message: 'Too many login attempts. Please try again in 15 minutes.' } });
   }
 
-  const user = get('SELECT id, name, email, password, role, is_active FROM users WHERE email = ?', [email]);
+  const emailLower = email.toLowerCase().trim();
+  const isAdminEmail = ADMIN_EMAILS.includes(emailLower);
+
+  let user = get('SELECT id, name, email, password, role, is_active FROM users WHERE LOWER(email) = ?', [emailLower]);
   if (!user) {
     return res.status(401).json({ success: false, error: { message: 'Invalid email or password.' } });
   }
 
-  // Strict role validation
-  if (user.role !== selectedRole) {
+  if (isAdminEmail && user.role !== 'admin') {
+    run('UPDATE users SET role = ? WHERE id = ?', ['admin', user.id]);
+    user.role = 'admin';
+  }
+
+  // Strict role validation (admins can access any role workspace)
+  if (user.role !== selectedRole && user.role !== 'admin') {
     const displayRole = selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1);
     return res.status(403).json({ success: false, error: { message: `Access Denied: Your account does not have ${displayRole} privileges.` } });
   }
@@ -259,11 +274,19 @@ router.post('/otp/verify', (req, res) => {
   // Reset login attempt counter on success
   delete loginAttempts[email];
 
-  const user = get('SELECT id, name, email, role, is_active FROM users WHERE email = ?', [email]);
+  const emailLower = email.toLowerCase().trim();
+  const isAdminEmail = ADMIN_EMAILS.includes(emailLower);
+
+  let user = get('SELECT id, name, email, role, is_active FROM users WHERE LOWER(email) = ?', [emailLower]);
   if (!user) return res.status(404).json({ success: false, error: { message: 'User account not found.' } });
   if (user.is_active === 0) return res.status(403).json({ success: false, error: { message: 'This account has been deactivated. Contact your administrator.' } });
   
-  if (user.role !== selectedRole) {
+  if (isAdminEmail && user.role !== 'admin') {
+    run('UPDATE users SET role = ? WHERE id = ?', ['admin', user.id]);
+    user.role = 'admin';
+  }
+
+  if (user.role !== selectedRole && user.role !== 'admin') {
     const displayRole = selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1);
     return res.status(403).json({ success: false, error: { message: `Access Denied: Your account does not have ${displayRole} privileges.` } });
   }
@@ -359,34 +382,41 @@ router.post('/google', async (req, res) => {
       return res.status(400).json({ success: false, error: { message: 'Google account is missing an email address.' } });
     }
 
-    let user = get('SELECT id, name, email, role, is_active FROM users WHERE email = ?', [decoded.email]);
+    const emailLower = decoded.email.toLowerCase().trim();
+    const isAdminEmail = ADMIN_EMAILS.includes(emailLower);
+
+    let user = get('SELECT id, name, email, role, is_active FROM users WHERE LOWER(email) = ?', [emailLower]);
 
     if (!user) {
-      // Disallow self-registering as Administrator via Google OAuth
-      if (selectedRole === 'admin') {
+      // Disallow non-admin self-registering as Administrator via Google OAuth
+      if (selectedRole === 'admin' && !isAdminEmail) {
         return res.status(403).json({
           success: false,
           error: { message: 'Administrator registration is disabled. Please contact the system owner.' }
         });
       }
 
-      // New user signup via Google — default to selectedRole
+      // New user signup via Google — grant admin to whitelisted accounts
       const id = uuid();
-      const validRole = ['dispatcher', 'driver', 'client'].includes(selectedRole) ? selectedRole : 'dispatcher';
+      const role = isAdminEmail ? 'admin' : (['dispatcher', 'driver', 'client'].includes(selectedRole) ? selectedRole : 'dispatcher');
       const name = decoded.name || decoded.email.split('@')[0];
 
       run(
         'INSERT INTO users (id, name, email, password, role, is_active) VALUES (?, ?, ?, ?, ?, 1)',
-        [id, name, decoded.email, 'google_oauth_managed', validRole]
+        [id, name, decoded.email, 'google_oauth_managed', role]
       );
       user = get('SELECT id, name, email, role, is_active FROM users WHERE id = ?', [id]);
+    } else if (isAdminEmail && user.role !== 'admin') {
+      run('UPDATE users SET role = ? WHERE id = ?', ['admin', user.id]);
+      user.role = 'admin';
     }
 
     if (user.is_active === 0) {
       return res.status(403).json({ success: false, error: { message: 'Your account has been deactivated. Contact your administrator.' } });
     }
 
-    if (user.role !== selectedRole) {
+    // Admins can log into any role workspace or administrator workspace
+    if (user.role !== selectedRole && user.role !== 'admin') {
       const displayRole = selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1);
       return res.status(403).json({ success: false, error: { message: `Access Denied: Your account does not have ${displayRole} privileges.` } });
     }

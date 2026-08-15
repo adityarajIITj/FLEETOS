@@ -32,7 +32,9 @@ async function seed() {
 
   // Users
   const users = [
-    { id: uuid(), name: 'Admin User', email: 'admin@fleetos.io', role: 'admin' },
+    { id: uuid(), name: 'System Admin', email: 'admin@fleetos.io', role: 'admin' },
+    { id: uuid(), name: 'Divyansh Sharma', email: 'sharma2002divyansh@gmail.com', role: 'admin' },
+    { id: uuid(), name: 'Aditya Raj', email: 'b25bs1020@iitj.ac.in', role: 'admin' },
     { id: uuid(), name: 'Rajesh Kumar', email: 'rajesh@fleetos.io', role: 'dispatcher' },
     { id: uuid(), name: 'Priya Sharma', email: 'priya@fleetos.io', role: 'dispatcher' },
     { id: uuid(), name: 'Arun Nair', email: 'arun@fleetos.io', role: 'driver' },
