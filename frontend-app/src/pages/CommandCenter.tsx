@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Navigation, Truck, Package, BarChart3, Settings, LogOut,
   Zap, MapPin, Circle, Route, Plus, X, Sun, Moon, Shield,
-  Link
+  Link, CheckCircle, AlertCircle
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';

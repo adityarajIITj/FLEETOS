@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "start": "node backend/src/server.js",
+    "build": "npm --prefix frontend-app run build",
     "backend:dev": "npm --prefix backend run dev",
     "frontend:dev": "npm --prefix frontend-app run dev",
     "frontend:build": "npm --prefix frontend-app run build",

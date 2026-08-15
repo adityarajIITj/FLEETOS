@@ -1,4 +1,4 @@
-import { useState, useEffect, DragEvent } from 'react';
+import { useState, useEffect, type DragEvent } from 'react';
 import { apiGet, apiPost } from '../lib/api';
 import { Truck, User, AlertCircle, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';

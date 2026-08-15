@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npm --prefix frontend-app run build",
+  "outputDirectory": "frontend-app/dist",
+  "installCommand": "npm --prefix frontend-app install",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

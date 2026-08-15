@@ -62,6 +62,9 @@ export default function CustomerPortal() {
           current_lat: detail.vehicle_lat,
           current_lng: detail.vehicle_lng,
           current_speed: detail.vehicle_speed || 0,
+          odometer_km: 0,
+          assigned_driver: null,
+          created_at: new Date().toISOString(),
         });
       } else {
         setLiveVehicle(null);
