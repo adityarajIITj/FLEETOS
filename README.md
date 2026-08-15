@@ -647,7 +647,7 @@ These are future expansion areas, not blanket claims about the current prototype
 
 
 <p align="center">
-<img src="src/assets/screenshots/teami-information.jpg" alt="Team Information and Roles" width="82%">
+<img src="src/assets/screenshots/team-information.jpg" alt="Team Information and Roles" width="82%">
 </p>
 
 
