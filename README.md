@@ -1,359 +1,683 @@
+<div align="center">
+
+<img src="src/assets/screenshots/sih-cover-fleetos.png" alt="FleetOS — Smart Fleet Coordination and Logistics Management Platform" width="100%">
+
 # FleetOS
 
-**Smart Fleet Coordination & Logistics Management Platform**
+### Smart Fleet Coordination & Logistics Management Platform
 
-FleetOS is a full-stack fleet management system designed for real-time vehicle tracking, intelligent shipment allocation, and multi-role operational control. It provides dedicated workspaces for administrators, dispatchers, drivers, and customers — each tailored to their specific workflow requirements.
+<p>
+<strong>Track • Optimize • Allocate • Deliver</strong>
+</p>
 
----
+<p>
+Real-time fleet visibility · Driver–vehicle allocation · Shipment lifecycle · Route intelligence · Role-based operations
+</p>
 
-## Table of Contents
+<p>
+<b>Smart India Hackathon 2026 · PS2 · Software-based Solution</b><br>
+<b>Team: CEDAR</b>
+</p>
 
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Key Features](#key-features)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-- [Project Structure](#project-structure)
-- [API Reference](#api-reference)
-- [Environment Variables](#environment-variables)
-- [Team](#team)
-- [License](#license)
+</div>
 
 ---
 
-## Overview
+## 1. Problem & Solution
 
-FleetOS addresses the core operational challenges of fleet logistics: vehicle tracking, shipment lifecycle management, driver assignment, and route optimization. The platform implements role-based access control (RBAC) with four distinct user roles, each with a purpose-built interface.
+Fleet operations are not just a GPS problem. A useful logistics platform has to connect vehicle availability, driver assignment, cargo constraints, shipment state, routing and operational visibility in one workflow.
 
-| Role | Workspace | Capabilities |
-|------|-----------|-------------|
-| **Administrator** | Admin Portal | System management, user oversight, fleet analytics, configuration |
-| **Dispatcher** | Command Center | Real-time fleet map, shipment creation, vehicle-driver allocation, route planning |
-| **Driver** | Driver Workspace | Active route view, shipment status updates, proof-of-delivery capture |
-| **Customer** | Customer Portal | Shipment tracking, delivery status monitoring |
+**FleetOS** is built as that operational layer. It provides a unified interface for fleet monitoring, driver–vehicle allocation, shipment management, route computation, live map visibility and role-based administration.
+
+The prototype is designed around the SIH problem framing and demonstrates the end-to-end logistics workflow using simulated/operational data rather than requiring physical tracking hardware.
+
+### What the platform addresses
+
+- Fleet visibility
+- Vehicle utilization
+- Cargo-to-vehicle assignment
+- Driver coordination
+- Shipment transparency
+- Route planning
+- Operational monitoring
 
 ---
 
-## Architecture
+## 2. Fleet Operations
 
+The Fleet Operations workspace gives dispatch and operations users a centralized view of the vehicle roster.
+
+It exposes vehicle registration data, class, fuel type, payload capacity, assigned driver and current operational state. Vehicles can be filtered by states such as **Available, En Route, Idle and Maintenance**.
+
+### Implemented capabilities
+
+- Vehicle registration and management
+- Vehicle classes and fuel types
+- Payload capacity tracking
+- Driver assignment
+- Operational status tracking
+- Fleet filtering
+
+<p align="center">
+<img src="src/assets/screenshots/admin-fleet-roster.jpg" alt="FleetOS administrator fleet roster" width="96%">
+</p>
+
+*Administrator fleet roster showing vehicle class, fuel, capacity, assigned driver and status.*
+
+---
+
+## 3. Driver–Vehicle Allocation
+
+FleetOS treats driver and vehicle allocation as an explicit operational workflow instead of embedding it inside shipment creation.
+
+The allocation workspace shows active drivers on one side and the complete vehicle pool on the other, making current assignments and unassigned vehicles immediately visible.
+
+### Allocation logic
+
+The current implementation follows a constraint-first, greedy allocation approach:
+
+```text
+Pending Shipment
+      │
+      ▼
+Vehicle availability
+      │
+      ▼
+Vehicle-type compatibility
+      │
+      ▼
+Cargo capacity check
+      │
+      ▼
+Distance to pickup
+      │
+      ▼
+Rank feasible candidates
+      │
+      ▼
+Create driver ↔ vehicle ↔ shipment assignment
 ```
-┌─────────────────────────────────────────────────────────┐
-│                     Frontend (Vite + React)              │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐  │
-│  │  Admin   │ │Dispatcher│ │  Driver  │ │  Customer  │  │
-│  │  Portal  │ │ Command  │ │Workspace │ │   Portal   │  │
-│  │          │ │  Center  │ │          │ │            │  │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └─────┬──────┘  │
-│       └─────────────┴────────────┴─────────────┘         │
-│                         │                                │
-│              WebSocket + REST API Calls                   │
-└─────────────────────────┬───────────────────────────────┘
-                          │
-┌─────────────────────────┴───────────────────────────────┐
-│                   Backend (Express.js)                    │
-│                                                          │
-│  ┌──────────┐  ┌──────────┐  ┌───────────────────────┐  │
-│  │   Auth   │  │  Fleet   │  │  Allocation Engine    │  │
-│  │  + OTP   │  │ Tracking │  │  (Greedy Nearest)     │  │
-│  └──────────┘  └──────────┘  └───────────────────────┘  │
-│  ┌──────────┐  ┌──────────┐  ┌───────────────────────┐  │
-│  │Shipments │  │  Routes  │  │  OSRM Route Optimizer │  │
-│  │Lifecycle │  │ + Multi  │  │  + Haversine Fallback │  │
-│  └──────────┘  └──────────┘  └───────────────────────┘  │
-│                                                          │
-│  Socket.IO (Real-time GPS)    SQLite (sql.js)            │
-│  Firebase Admin (Google Auth) Nodemailer (OTP via SMTP)  │
-└──────────────────────────────────────────────────────────┘
-```
+
+The current prototype uses a **greedy nearest-vehicle strategy** after compatibility and capacity filtering. More advanced optimization is part of the production roadmap.
+
+<p align="center">
+<img src="src/assets/screenshots/admin-driver-vehicle-allocation.jpg" alt="FleetOS driver vehicle allocation workspace" width="96%">
+</p>
+
+*Driver–vehicle allocation workspace with active drivers, assigned vehicles and available fleet.*
 
 ---
 
-## Key Features
+## 4. Intelligent Auto-Allocation
 
-### Real-Time Fleet Tracking
-- Live GPS position broadcasting via WebSocket (Socket.IO)
-- Interactive map interface powered by Leaflet with dark tile layers
-- Vehicle status monitoring (available, en route, maintenance, idle)
+The Command Center exposes an **AI Auto-Allocate** control for operational assignment. In the current prototype, this represents the automated allocation workflow rather than a claim that a trained machine-learning model is already making production decisions.
 
-### Intelligent Allocation Engine
-- Greedy nearest-vehicle allocation algorithm
-- Filters by vehicle type compatibility, weight capacity, and availability
-- Batch allocation with priority-based ordering (urgent, high, medium, low)
-- Distance-ranked candidate scoring using Haversine formula
+The implemented allocator evaluates operational constraints and ranks feasible vehicles before creating the assignment.
 
-### Route Optimization
-- OSRM integration for real-world driving routes with polyline geometry
-- Multi-stop route planning using nearest-neighbor ordering
-- Automatic Haversine fallback when OSRM is unavailable
-- Fuel cost estimation by vehicle and fuel type (diesel, petrol, electric, CNG)
+This distinction matters: the SIH technical concept includes AI-based allocation and route optimization, while the present prototype uses deterministic allocation logic that can later be replaced or extended by OR-Tools/ML optimization services.
 
-### Shipment Lifecycle Management
-- Full status tracking: pending, allocated, picked up, in transit, delivered, cancelled
-- Enforced state machine transitions
-- Proof-of-delivery image capture
-- Shipment tracking tokens for customer-facing visibility
+<p align="center">
+<img src="src/assets/screenshots/command-center-dark-map.jpg" alt="FleetOS Command Center with AI Auto-Allocate" width="96%">
+</p>
 
-### Authentication & Security
-- JWT-based authentication with role-based access control
-- Email OTP verification via SMTP (Nodemailer)
-- Google OAuth integration via Firebase
-- Helmet.js security headers with strict CSP directives
-- Rate limiting on authentication endpoints
+*Command Center showing the AI Auto-Allocate control alongside the live fleet workspace.*
+
+---
+
+## 5. Live Fleet Command Center
+
+The Fleet Command Center is the primary operational view. It combines fleet statistics, vehicle status panels, map visualization and vehicle-level details.
+
+### Live operational view
+
+- Total vehicles
+- Vehicles en route
+- Available vehicles
+- Shipment count
+- Fleet filters
+- Vehicle markers
+- Vehicle status popovers
+- Current speed and capacity
+- Map controls
+
+<p align="center">
+<img src="src/assets/screenshots/command-center-live-fleet.jpg" alt="FleetOS live fleet command center regional map" width="96%">
+</p>
+
+*Regional fleet view with multiple vehicle markers and operational status information.*
+
+---
+
+## 6. Geographic Fleet Tracking
+
+FleetOS uses an interactive map layer to visualize vehicle positions and operational state. The prototype uses Leaflet-based mapping and supports different visual map presentations.
+
+The map is not treated as an isolated screen: vehicle selection, status, speed, capacity and fleet filters are connected to the operational data displayed around it.
+
+<p align="center">
+<img src="src/assets/screenshots/command-center-light-map.jpg" alt="FleetOS light map fleet tracking view" width="96%">
+</p>
+
+*Light map presentation showing the geographic fleet distribution across the region.*
+
+---
+
+## 7. Real-Time Tracking Architecture
+
+The implemented real-time layer uses **Socket.IO** to broadcast vehicle telemetry and operational state changes from the backend to connected clients.
+
+```text
+Driver / GPS Source
+        │
+        ▼
+   GPS Update API
+        │
+        ▼
+   Express Backend
+        │
+        ▼
+ Socket.IO Events
+        │
+        ├──────────► Command Center Map
+        ├──────────► Fleet Status Panels
+        └──────────► Vehicle Detail Views
+```
+
+This allows the command center to update operational state without repeatedly refreshing the page.
+
+<p align="center">
+<img src="src/assets/screenshots/command-center-dark-map.jpg" alt="FleetOS real-time command center" width="96%">
+</p>
+
+*The command center provides the visual endpoint for real-time fleet state.*
+
+---
+
+## 8. Shipment Management
+
+Shipments are treated as operational entities rather than simple records. Each manifest contains cargo information, origin, destination, weight, status and tracking information.
+
+### Shipment lifecycle
+
+```text
+PENDING → ALLOCATED → PICKED UP → IN TRANSIT → DELIVERED
+                         │
+                         └──────────────→ CANCELLED
+```
+
+### Shipment capabilities
+
+- Cargo description
+- Weight and priority
+- Origin and destination
+- Vehicle assignment
+- Driver assignment
+- Shipment status
+- Tracking token
+- Special instructions
+- Proof-of-delivery support
+
+<p align="center">
+<img src="src/assets/screenshots/admin-shipment-manifests.png" alt="FleetOS shipment manifests" width="96%">
+</p>
+
+*Shipment management console showing cargo, origin, destination, weight, status and tracking links.*
+
+---
+
+## 9. Create Shipment Workflow
+
+The shipment creation workflow captures the operational information needed before dispatch.
+
+The form supports cargo description, weight, priority, vehicle requirements, origin, destination, operational assignment and special instructions.
+
+Location resolution converts human-readable locations into coordinates for downstream mapping and routing.
+
+<p align="center">
+<img src="src/assets/screenshots/create-shipment-modal.jpg" alt="FleetOS create shipment form" width="72%">
+</p>
+
+*Shipment creation form with cargo, priority, vehicle requirement, origin/destination and assignment controls.*
+
+---
+
+## 10. Route Optimization
+
+FleetOS combines road-network routing with a deterministic geographic fallback.
+
+```text
+Origin + Destination + Vehicle Constraints
+                    │
+                    ▼
+                  OSRM
+                    │
+          ┌─────────┴─────────┐
+          │                   │
+       Available          Unavailable
+          │                   │
+          ▼                   ▼
+   Road route +          Haversine
+   route geometry        distance fallback
+          │                   │
+          └─────────┬─────────┘
+                    ▼
+              Route response
+```
+
+The current route layer supports:
+
+- OSRM road routing
+- Route geometry/polyline data
+- Multi-stop planning
+- Haversine distance calculations
+- Fallback behavior when external routing is unavailable
+- Vehicle/fuel-aware cost estimation
+
+The SIH technical approach proposes expanding this layer with optimization tooling such as OR-Tools. That is a planned production-scale enhancement, not something this README claims is already fully deployed.
+
+<p align="center">
+<img src="src/assets/screenshots/command-center-light-map.jpg" alt="FleetOS route and map interface" width="96%">
+</p>
+
+*Map interface used as the geographic foundation for route and fleet operations.*
+
+---
+
+## 11. Users, Authentication & RBAC
+
+FleetOS separates access according to operational responsibility. The administrator console provides user management and role-based controls.
+
+### Supported operational roles
+
+| Role | Workspace | Primary responsibility |
+|---|---|---|
+| Administrator | Admin Management Console | Users, RBAC, fleet, shipments, metrics |
+| Dispatcher | Fleet Command Center | Monitoring, shipment creation, allocation, routes |
+| Driver | Driver Workspace | Active assignments and execution |
+| Customer | Customer Tracking | Shipment visibility and delivery status |
+
+### Security controls implemented in the application
+
+- JWT authentication
+- Role-based authorization
+- Email OTP verification
+- Google OAuth integration through Firebase
 - bcrypt password hashing
+- Helmet security headers
+- Authentication rate limiting
+- Request validation
+- Restricted administrator access
 
-### Role-Based Workspaces
-- Dedicated UI for each role with contextual data and controls
-- Administrator access restricted to sign-in only (no self-registration)
-- Cinematic onboarding flow with role selection
+<p align="center">
+<img src="src/assets/screenshots/admin-users-rbac.jpg" alt="FleetOS users and RBAC console" width="96%">
+</p>
 
----
-
-## Tech Stack
-
-### Frontend
-| Technology | Purpose |
-|---|---|
-| React 19 | UI framework |
-| TypeScript | Type safety |
-| Vite 8 | Build tooling and dev server |
-| Tailwind CSS 4 | Utility-first styling |
-| Leaflet + React Leaflet | Interactive map rendering |
-| Framer Motion | Page transitions and animations |
-| Socket.IO Client | Real-time data streaming |
-| Firebase SDK | Google OAuth client |
-| Lucide React | Icon system |
-
-### Backend
-| Technology | Purpose |
-|---|---|
-| Node.js + Express | API server |
-| SQLite (sql.js) | Embedded database (zero-config) |
-| Socket.IO | Real-time GPS event broadcasting |
-| JWT (jsonwebtoken) | Token-based authentication |
-| Firebase Admin SDK | Google OAuth token verification |
-| Nodemailer | OTP email delivery via SMTP |
-| OSRM | Open-source routing engine integration |
-| Helmet | HTTP security headers |
-| Joi | Request payload validation |
-| bcryptjs | Password hashing |
+*Administrator Users & RBAC console showing operational roles and account states.*
 
 ---
 
-## Getting Started
+## 12. User-Type Selection
 
-### Prerequisites
+The onboarding flow first separates **Internal Staff** from **Customer** access.
 
-- **Node.js** v18 or later
-- **npm** v9 or later
+This prevents the initial entry point from becoming a single generic login experience and establishes the correct operational path before role-specific access is selected.
 
-### Installation
+<p align="center">
+<img src="src/assets/screenshots/onboarding-user-type.jpg" alt="FleetOS user type selection" width="82%">
+</p>
 
-1. **Clone the repository**
-
-   ```bash
-   git clone https://github.com/adityarajIITj/FLEETOS.git
-   cd fleetos
-   ```
-
-2. **Install dependencies**
-
-   ```bash
-   # Backend
-   cd backend
-   npm install
-
-   # Frontend
-   cd ../frontend-app
-   npm install
-   ```
-
-3. **Configure environment variables**
-
-   ```bash
-   cp .env.example backend/.env
-   ```
-
-   Edit `backend/.env` and set the required values. Refer to the [Environment Variables](#environment-variables) section.
-
-4. **Seed the database**
-
-   ```bash
-   npm run seed
-   ```
-
-5. **Start development servers**
-
-   ```bash
-   # From project root
-   npm run backend:dev     # API server on http://localhost:3000
-   npm run frontend:dev    # Vite dev server on http://localhost:5173
-   ```
-
-6. **Open the application**
-
-   Navigate to `http://localhost:5173` in your browser.
-
-### Demo Credentials
-
-| Role | Email | Password |
-|------|-------|----------|
-| Administrator | `admin@fleetos.io` | `password123` |
-| Dispatcher | `rajesh@fleetos.io` | `password123` |
-| Driver | `arun@fleetos.io` | `password123` |
+*Initial FleetOS access-level selection: Internal Staff or Customer.*
 
 ---
 
-## Project Structure
+## 13. Workspace & Role Selection
 
+Internal staff are then routed toward their operational workspace: **Driver, Dispatcher or Administrator**.
+
+This is the second stage of the onboarding flow and maps access to the intended operational responsibility.
+
+<p align="center">
+<img src="src/assets/screenshots/onboarding-role-selection.jpg" alt="FleetOS operational role selection" width="82%">
+</p>
+
+*Internal staff role selection for Driver, Dispatcher or Administrator workspaces.*
+
+---
+
+## 14. Administrator Fleet Console
+
+The administrator console aggregates the operational management surfaces into one navigation layer: users/RBAC, fleet vehicles, allocation, shipments and system metrics.
+
+This interface is intended for system-level administration rather than day-to-day driver execution.
+
+<p align="center">
+<img src="src/assets/screenshots/admin-fleet-roster.jpg" alt="FleetOS administrator console fleet section" width="96%">
+</p>
+
+*Administrator console with fleet management as one of the core administrative modules.*
+
+---
+
+## 15. System & Operational Metrics
+
+The metrics console summarizes high-level operational indicators such as total fleet vehicles, cargo shipments, cargo tonnage and telemetry activity.
+
+These metrics provide an operational snapshot rather than replacing a future analytics warehouse or business-intelligence layer.
+
+<p align="center">
+<img src="src/assets/screenshots/admin-system-metrics.jpg" alt="FleetOS system and metrics dashboard" width="96%">
+</p>
+
+*System and metrics console summarizing fleet, shipment, tonnage and telemetry indicators.*
+
+---
+
+## 16. Technical Approach — SIH Proposal
+
+The SIH technical approach defines the intended end-to-end architecture around fleet/GPS data, backend processing, AI-based allocation and route optimization, real-time updates, driver execution and customer tracking.
+
+The proposal identifies technologies including React, Node.js/Express, Python, OR-Tools, PostgreSQL/PostGIS, Redis, Kafka, WebSockets, Docker and AWS.
+
+<p align="center">
+<img src="src/assets/screenshots/sih-technical-approach.png" alt="FleetOS SIH technical approach" width="96%">
+</p>
+
+**Important:** this slide describes the broader proposed architecture. The current repository prototype should not be interpreted as already implementing every listed production technology.
+
+---
+
+## 17. Feasibility & Viability
+
+The prototype is technically demonstrable using open-source technologies, simulated GPS data and synthetic operational data. The SIH proposal identifies practical risks including GPS inaccuracies, connectivity limitations, optimization complexity, limited training data and dependence on external map/cloud services.
+
+The proposed mitigation strategies include real-time caching/streaming, GPS validation, offline synchronization, route caching and fallback algorithms.
+
+<p align="center">
+<img src="src/assets/screenshots/sih-feasibility-viability.png" alt="FleetOS feasibility and viability analysis" width="96%">
+</p>
+
+---
+
+## 18. Current Implemented Architecture
+
+The current repository is intentionally simpler than the proposed production architecture.
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                         FRONTEND                             │
+│                 React + TypeScript + Vite                   │
+│                                                              │
+│ Admin Console · Command Center · Onboarding · Workspaces    │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                    REST API + Socket.IO
+                               │
+┌──────────────────────────────▼───────────────────────────────┐
+│                         BACKEND                              │
+│                    Node.js + Express                        │
+│                                                              │
+│ Auth/RBAC · Fleet · Shipments · Allocation · Routes · GPS   │
+└───────────────┬─────────────────────┬────────────────────────┘
+                │                     │
+        ┌───────▼────────┐    ┌───────▼─────────┐
+        │ sql.js / SQLite│    │    Socket.IO     │
+        │ operational DB │    │ real-time events │
+        └────────────────┘    └─────────────────┘
 ```
+
+### Planned production-scale evolution
+
+The project plan proposes a future architecture with PostgreSQL/PostGIS, Redis, Kafka, dedicated AI/ML optimization, analytics/notification services, Dockerized services and production observability.
+
+Those components are explicitly treated as **roadmap items** unless present in the implementation.
+
+---
+
+## 19. Technology Stack
+
+### Current prototype
+
+| Layer | Technology | Purpose |
+|---|---|---|
+| Frontend | React + TypeScript + Vite | Application UI |
+| Styling | Tailwind CSS | Interface styling |
+| Maps | Leaflet / React Leaflet | Fleet visualization |
+| Backend | Node.js + Express | REST API and application services |
+| Real-time | Socket.IO | Telemetry and state updates |
+| Database | sql.js / SQLite | Operational persistence |
+| Routing | OSRM | Road routing |
+| Distance | Haversine | Geographic fallback |
+| Authentication | JWT / Firebase | Identity and authorization |
+| Security | Helmet / bcrypt / validation | Application security |
+
+### Proposed production stack
+
+React · Node.js/Express · Python · OR-Tools · PostgreSQL/PostGIS · Redis · Kafka · WebSockets · Docker · AWS
+
+The proposed stack comes from the SIH technical approach and master plan; it should not be read as a list of components currently deployed in the prototype.
+
+---
+
+## 20. API Surface
+
+Application endpoints are exposed under `/api/v1`.
+
+### Authentication
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/auth/login` | Authenticate user |
+| `POST` | `/auth/register` | Register user |
+| `POST` | `/auth/verify-otp` | Verify OTP and receive JWT |
+| `POST` | `/auth/google` | Google authentication |
+
+### Fleet
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/fleet/vehicles` | List vehicles |
+| `POST` | `/fleet/vehicles` | Register vehicle |
+| `PATCH` | `/fleet/vehicles/:id` | Update vehicle |
+| `POST` | `/fleet/gps` | Submit GPS update |
+
+### Shipments
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/shipments` | List shipments |
+| `POST` | `/shipments` | Create shipment |
+| `PATCH` | `/shipments/:id/status` | Update shipment state |
+| `GET` | `/shipments/track/:token` | Public shipment tracking |
+
+### Allocation & Routes
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/allocation/auto` | Automatic allocation |
+| `POST` | `/allocation/batch` | Batch allocation |
+| `POST` | `/routes/compute` | Compute route |
+| `POST` | `/routes/multi-stop` | Compute multi-stop route |
+
+---
+
+## 21. Project Structure
+
+```text
 fleetos/
 ├── backend/
-│   ├── data/                       # SQLite database file (gitignored)
+│   ├── data/
 │   ├── scripts/
-│   │   ├── gps-simulator.js        # GPS position simulator for testing
-│   │   └── reconcile.js            # Data reconciliation utility
-│   ├── src/
-│   │   ├── algorithms/
-│   │   │   ├── allocator.js        # Greedy nearest-vehicle allocation
-│   │   │   ├── haversine.js        # Distance and ETA calculations
-│   │   │   └── routeOptimizer.js   # OSRM routing with fallback
-│   │   ├── cache/
-│   │   │   └── memoryCache.js      # In-memory caching layer
-│   │   ├── config/
-│   │   │   ├── constants.js        # Roles, statuses, fuel costs
-│   │   │   └── database.js         # SQLite initialization and schema
-│   │   ├── middleware/
-│   │   │   └── auth.js             # JWT verification and RBAC middleware
-│   │   ├── realtime/
-│   │   │   ├── eventBus.js         # Internal event emitter
-│   │   │   └── socketManager.js    # Socket.IO server configuration
-│   │   ├── seeds/
-│   │   │   └── seed.js             # Database seeding script
-│   │   ├── services/
-│   │   │   ├── allocation/         # Vehicle-shipment allocation API
-│   │   │   ├── auth/               # Authentication and OTP routes
-│   │   │   ├── fleet/              # Vehicle management API
-│   │   │   ├── routes/             # Route computation API
-│   │   │   ├── shipments/          # Shipment CRUD and lifecycle API
-│   │   │   └── users/              # User management API
-│   │   └── server.js               # Express application entry point
-│   └── uploads/                    # Proof-of-delivery images (gitignored)
+│   │   ├── gps-simulator.js
+│   │   └── reconcile.js
+│   └── src/
+│       ├── algorithms/
+│       ├── cache/
+│       ├── config/
+│       ├── middleware/
+│       ├── realtime/
+│       ├── seeds/
+│       ├── services/
+│       │   ├── allocation/
+│       │   ├── auth/
+│       │   ├── fleet/
+│       │   ├── routes/
+│       │   ├── shipments/
+│       │   └── users/
+│       └── server.js
 │
 ├── frontend-app/
 │   ├── public/
-│   │   └── assets/                 # Static media (intro video, images)
 │   └── src/
 │       ├── components/
-│       │   ├── DriverVehicleAllocationPanel.tsx
-│       │   ├── FleetMap.tsx         # Leaflet map component
-│       │   └── TransitionPanel.tsx
 │       ├── hooks/
-│       │   ├── useAuth.tsx          # Authentication context and hooks
-│       │   └── useTheme.tsx         # Theme context
 │       ├── lib/
-│       │   ├── api.ts              # API client utilities
-│       │   ├── firebase.ts         # Firebase client configuration
-│       │   └── socket.ts           # Socket.IO client setup
 │       ├── pages/
-│       │   ├── AdminPortal.tsx      # Administrator workspace
-│       │   ├── CommandCenter.tsx    # Dispatcher workspace
-│       │   ├── CustomerPortal.tsx   # Customer tracking interface
-│       │   ├── DriverWorkspace.tsx  # Driver active route interface
-│       │   ├── OnboardingStory.tsx  # Onboarding and authentication flow
-│       │   └── RoleSelect.tsx       # Role selection screen
-│       ├── App.tsx                  # Root component with role-based routing
-│       └── main.tsx                 # Application entry point
+│       ├── App.tsx
+│       └── main.tsx
 │
-├── frontend/                       # Legacy static HTML frontend
-├── package.json                    # Root-level scripts
-├── .env.example                    # Environment variable template
-└── .gitignore
+├── src/
+│   └── assets/
+│       └── screenshots/
+├── package.json
+├── .env.example
+├── .gitignore
+└── README.md
 ```
 
 ---
 
-## API Reference
+## 22. Getting Started
 
-All endpoints are prefixed with `/api/v1`.
+### Prerequisites
 
-### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/auth/login` | Authenticate with email and password, triggers OTP |
-| `POST` | `/auth/register` | Register a new user account |
-| `POST` | `/auth/verify-otp` | Verify OTP code and receive JWT |
-| `POST` | `/auth/google` | Authenticate via Google OAuth token |
+- Node.js 18+
+- npm 9+
 
-### Fleet Management
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/fleet/vehicles` | List all vehicles with current status |
-| `POST` | `/fleet/vehicles` | Register a new vehicle |
-| `PATCH` | `/fleet/vehicles/:id` | Update vehicle details or status |
-| `POST` | `/fleet/gps` | Submit GPS position update |
+### Clone
 
-### Shipments
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/shipments` | List shipments (filtered by role) |
-| `POST` | `/shipments` | Create a new shipment |
-| `PATCH` | `/shipments/:id/status` | Transition shipment status |
-| `GET` | `/shipments/track/:token` | Public shipment tracking by token |
+```bash
+git clone https://github.com/adityarajIITj/FLEETOS.git
+cd FLEETOS
+```
 
-### Allocation
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/allocation/auto` | Auto-allocate vehicle to shipment |
-| `POST` | `/allocation/batch` | Batch-allocate multiple shipments |
+### Install dependencies
 
-### Routes
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/routes/compute` | Compute optimal route between points |
-| `POST` | `/routes/multi-stop` | Compute multi-stop optimized route |
+```bash
+# Backend
+cd backend
+npm install
 
-### Health
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/health` | Server health check |
+# Frontend
+cd ../frontend-app
+npm install
+```
 
----
+### Environment configuration
 
-## Environment Variables
+Create the backend environment file from the project template and configure the required authentication, SMTP, Firebase and JWT values.
 
-Create a `backend/.env` file based on `.env.example`:
+```bash
+cp .env.example backend/.env
+```
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `PORT` | API server port | No (default: `3000`) |
-| `JWT_SECRET` | Secret key for JWT signing | Yes |
-| `JWT_EXPIRY` | Token expiration duration | No (default: `24h`) |
-| `OSRM_BASE_URL` | OSRM routing server URL | No (default: public OSRM) |
-| `SMTP_USER` | Email address for OTP delivery | Yes |
-| `SMTP_PASS` | SMTP app password | Yes |
-| `FIREBASE_API_KEY` | Firebase client API key | Yes (for Google Auth) |
-| `FIREBASE_AUTH_DOMAIN` | Firebase auth domain | Yes |
-| `FIREBASE_PROJECT_ID` | Firebase project identifier | Yes |
-| `FIREBASE_CLIENT_EMAIL` | Firebase service account email | Yes |
-| `FIREBASE_PRIVATE_KEY` | Firebase service account private key | Yes |
+### Seed and run
+
+```bash
+npm run seed
+npm run backend:dev
+npm run frontend:dev
+```
+
+Typical local endpoints:
+
+```text
+Backend  → http://localhost:3000
+Frontend → http://localhost:5173
+```
 
 ---
 
-## Team
+## 23. Security Notes
 
-### Core Team
+Never commit real credentials, private keys, SMTP passwords, JWT secrets or Firebase service-account credentials.
 
-| Name | Role | GitHub |
-|------|------|--------|
-| Aditya | Team Lead | [github.com/adityarajIITj](https://github.com/adityarajIITj) |
-| Divyansh | Member | [github.com/divyanshsharma24-git](https://github.com/divyanshsharma24-git) |
-| Atharv | Member | [github.com/fratharv](https://github.com/fratharv) |
-| Piyush | Member | — |
-| Drishti | Member | — |
-| Chirag | Member | — |
+The current application includes application-level authentication and authorization controls, but a hackathon prototype should not automatically be treated as production-hardened infrastructure. Production deployment requires additional review of secrets management, transport security, database access, logging, rate limits, dependency security and operational monitoring.
 
 ---
 
-## License
+## 24. Roadmap
 
-This project is developed as part of a hackathon. All rights reserved by the contributors.
+The production-scale roadmap includes:
+
+- PostgreSQL + PostGIS
+- Redis caching
+- Kafka event streaming
+- OR-Tools-based optimization
+- Dedicated AI/ML optimization services
+- ML-based ETA prediction
+- Advanced assignment optimization
+- Anomaly detection
+- Geofencing and alerts
+- Analytics and cost forecasting
+- Notification services
+- Offline-capable driver PWA
+- Dockerized service architecture
+- CI/CD
+- Production observability
+
+These are future expansion areas, not blanket claims about the current prototype.
+
+---
+
+## 25. Team — CEDAR
+
+| Member | Role | GitHub |
+
+| Divyash Sharma| Team Leader | [@divyanshsharma24-git](https://github.com/divyanshsharma24-git) |
+
+| Aditya Raj | Co-Leader | [@adityarajIITj](https://github.com/adityarajIITj) |
+
+| Atharv | Data Designer | [@fratharv](https://github.com/fratharv) |
+
+| Piyush | Creative | - |
+
+| Drishti | Member | - |
+
+| Chirag | Member | - |
+
+
+---
+
+## 26. Smart India Hackathon Context
+
+**FleetOS** is presented as a software-based logistics solution for Smart India Hackathon 2026, PS2, under the team **CEDAR**.
+
+The proposed end-to-end workflow is:
+
+```text
+GPS + Shipment Data
+        ↓
+Backend Processing
+        ↓
+Allocation + Route Optimization
+        ↓
+Real-Time Fleet Updates
+        ↓
+Driver Execution
+        ↓
+Customer Tracking + Analytics
+```
+
+The repository demonstrates the core operational prototype while the SIH technical approach defines the intended path toward a more scalable production system.
+
+---
+
+<div align="center">
+
+## FleetOS
+
+**Track. Optimize. Deliver.**
+
+Smart logistics with real-time operational visibility.
+
+</div>
