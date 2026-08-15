@@ -15,20 +15,13 @@ const app = express();
 const server = http.createServer(app);
 
 // Middleware
-// Restrict CORS to specified client origin or fallback to localhost
-const allowedOrigins = [process.env.CLIENT_URL, 'http://localhost:3000', 'http://localhost:5173'].filter(Boolean);
+// Allow all origins (frontend may be on Vercel, localhost, or any domain)
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, true); // Permissive in dev
-    }
-  },
+  origin: true,
   credentials: true
 }));
 
-// Strict Helmet Configuration (Security Headers)
+// Helmet Security Headers (relaxed for cross-origin API usage)
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -37,7 +30,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
       imgSrc: ["'self'", "data:", "https://*.cartocdn.com", "https://*.tile.openstreetmap.org", "https://unpkg.com", "https://www.gstatic.com"],
-      connectSrc: ["'self'", "http://localhost:5173", "ws://localhost:5173", "https://router.project-osrm.org", "https://overpass-api.de", "ws:", "wss:", "https://identitytoolkit.googleapis.com", "https://securetoken.googleapis.com"],
+      connectSrc: ["'self'", "http://localhost:*", "ws://localhost:*", "https:", "wss:", "ws:"],
       frameSrc: ["'self'", "https://fleetos-3451c.firebaseapp.com"],
       frameAncestors: ["'none'"] // X-Frame-Options: DENY
     }
@@ -62,10 +55,10 @@ app.use('/legacy', express.static(path.join(__dirname, '..', '..', 'frontend')))
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-// Rate Limiting
+// Rate Limiting (relaxed for demo/hackathon)
 const authLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
-  max: 5, // Limit each IP to 5 requests per `window`
+  max: 30, // 30 requests per minute per IP
   message: { success: false, error: { code: 'RATE_LIMIT', message: 'Too many authentication attempts, please try again later.' } }
 });
 
