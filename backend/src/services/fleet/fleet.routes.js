@@ -163,31 +163,37 @@ router.get('/vehicles/:id/history', authenticate, (req, res) => {
 
 // --- Driver <-> Vehicle Assignment ---
 router.post('/driver-with-vehicle', authenticate, requireRole('admin', 'dispatcher'), async (req, res) => {
-  const { name, email, password, registration_no, type, capacity_kg, fuel_type } = req.body;
-  if (!name || !email || !password || !registration_no) return res.status(400).json({ success: false, error: { message: 'Missing fields' } });
+  const { name, email, password, registration_no, type, capacity_kg, fuel_type, phone } = req.body;
+  if (!name || !email || !password || !registration_no) {
+    return res.status(400).json({ success: false, error: { message: 'All required fields (name, email, password, registration number) must be provided' } });
+  }
 
-  const existingUser = get('SELECT id FROM users WHERE email = ?', [email]);
-  if (existingUser) return res.status(409).json({ success: false, error: { message: 'Email already exists' } });
+  const existingUser = get('SELECT id FROM users WHERE email = ?', [email.trim().toLowerCase()]);
+  if (existingUser) return res.status(409).json({ success: false, error: { message: 'A user with this email already exists' } });
 
-  const existingVehicle = get('SELECT id FROM vehicles WHERE registration_no = ?', [registration_no]);
-  if (existingVehicle) return res.status(409).json({ success: false, error: { message: 'Vehicle registration already exists' } });
+  const existingVehicle = get('SELECT id FROM vehicles WHERE registration_no = ?', [registration_no.trim().toUpperCase()]);
+  if (existingVehicle) return res.status(409).json({ success: false, error: { message: 'A vehicle with this registration number already exists' } });
 
   try {
     const bcrypt = require('bcryptjs');
+    const { v4: uuid } = require('uuid');
     const hash = await bcrypt.hash(password, 10);
-    const driverId = require('uuid').v4();
-    const vehicleId = require('uuid').v4();
+    const driverId = uuid();
+    const vehicleId = uuid();
 
-    run('BEGIN TRANSACTION');
-    run('INSERT INTO users (id, name, email, password, role, is_active) VALUES (?, ?, ?, ?, ?, 1)', [driverId, name, email, hash, 'driver']);
-    run(`INSERT INTO vehicles (id, registration_no, type, capacity_kg, fuel_type, assigned_driver) VALUES (?,?,?,?,?,?)`, 
-      [vehicleId, registration_no, type || 'medium', parseFloat(capacity_kg) || 5000, fuel_type || 'diesel', driverId]);
-    run('COMMIT');
+    run(
+      'INSERT INTO users (id, name, email, phone, password, role, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)',
+      [driverId, name.trim(), email.trim().toLowerCase(), phone || null, hash, 'driver']
+    );
+    run(
+      'INSERT INTO vehicles (id, registration_no, type, capacity_kg, fuel_type, assigned_driver, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [vehicleId, registration_no.trim().toUpperCase(), type || 'medium', parseFloat(capacity_kg) || 5000, fuel_type || 'diesel', driverId, 'available']
+    );
 
-    res.status(201).json({ success: true, message: 'Driver and Vehicle created successfully' });
+    res.status(201).json({ success: true, message: 'Driver and Vehicle created successfully', data: { driverId, vehicleId } });
   } catch (err) {
-    run('ROLLBACK');
-    res.status(500).json({ success: false, error: { message: 'Failed to create driver and vehicle' } });
+    console.error('Error creating driver and vehicle:', err);
+    res.status(500).json({ success: false, error: { message: err.message || 'Failed to create driver and vehicle' } });
   }
 });
 

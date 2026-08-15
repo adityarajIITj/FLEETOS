@@ -24,8 +24,8 @@ const updateUserSchema = Joi.object({
   is_active: Joi.number().valid(0, 1),
 });
 
-// GET /api/v1/users — Admin only: list all users
-router.get('/', authenticate, requireRole('admin'), (req, res) => {
+// GET /api/v1/users — Admin & Dispatcher: list all users
+router.get('/', authenticate, requireRole('admin', 'dispatcher'), (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = Math.min(parseInt(req.query.limit) || 50, 100);
   const offset = (page - 1) * limit;
@@ -61,8 +61,8 @@ router.get('/', authenticate, requireRole('admin'), (req, res) => {
   });
 });
 
-// POST /api/v1/users — Admin only: create a new user
-router.post('/', authenticate, requireRole('admin'), async (req, res) => {
+// POST /api/v1/users — Admin & Dispatcher: create a new user
+router.post('/', authenticate, requireRole('admin', 'dispatcher'), async (req, res) => {
   const { error, value } = createUserSchema.validate(req.body);
   if (error) {
     return res.status(400).json({ success: false, error: { code: 'VALIDATION', message: error.details[0].message } });
