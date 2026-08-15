@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import type { Vehicle, Shipment } from '../lib/api';
+import { apiGet, type Vehicle, type Shipment } from '../lib/api';
 import { useTheme } from '../hooks/useTheme';
 
 interface FleetMapProps {
@@ -12,6 +12,7 @@ interface FleetMapProps {
   onSelectVehicle: (v: Vehicle) => void;
   geofenceActive: boolean;
   showAllRoutes: boolean;
+  trailActive?: boolean;
 }
 
 const statusColors: Record<string, string> = {
@@ -59,10 +60,13 @@ function createPinIcon(color: string, type: 'origin' | 'dest') {
 
 export default function FleetMap({
   vehicles,
+  shipments,
   selectedVehicle,
   selectedShipment,
   onSelectVehicle,
   geofenceActive,
+  showAllRoutes,
+  trailActive = false,
 }: FleetMapProps) {
   const { theme } = useTheme();
   const mapRef = useRef<L.Map | null>(null);
@@ -71,6 +75,8 @@ export default function FleetMap({
   const markersRef = useRef<Record<string, L.Marker>>({});
   const shipmentMarkersRef = useRef<L.Marker[]>([]);
   const routeLayerRef = useRef<L.GeoJSON | null>(null);
+  const allRoutesLayersRef = useRef<L.Layer[]>([]);
+  const trailLayerRef = useRef<L.Polyline | null>(null);
   const geofenceLayerRef = useRef<L.Circle[]>([]);
   const hasFitRef = useRef(false);
 
@@ -221,6 +227,128 @@ export default function FleetMap({
         }
       });
   }, [selectedShipment]);
+
+  // Handle All Routes Toggle
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Clear previous all-route layers
+    allRoutesLayersRef.current.forEach(l => map.removeLayer(l));
+    allRoutesLayersRef.current = [];
+
+    if (!showAllRoutes) return;
+
+    const routeShipments = shipments.filter(
+      s => s.status !== 'delivered' && s.status !== 'cancelled' && s.origin_lat && s.origin_lng && s.dest_lat && s.dest_lng
+    );
+
+    const activeList = routeShipments.length > 0
+      ? routeShipments
+      : shipments.filter(s => s.origin_lat && s.origin_lng && s.dest_lat && s.dest_lng);
+
+    const colors = ['#06b6d4', '#818cf8', '#f59e0b', '#10b981', '#ec4899', '#38bdf8', '#a855f7', '#14b8a6'];
+
+    activeList.forEach((s, idx) => {
+      const color = colors[idx % colors.length];
+      const oPos: L.LatLngTuple = [s.origin_lat, s.origin_lng];
+      const dPos: L.LatLngTuple = [s.dest_lat, s.dest_lng];
+
+      const popupHtml = `
+        <div style="font-family:sans-serif;min-width:180px;">
+          <h4 style="margin:0 0 4px;font-size:12px;font-weight:700;color:${color};">📦 ${s.tracking_token || s.id.slice(0, 8)}</h4>
+          <div style="font-size:11px;color:#64748b;">Status: <strong style="color:#0f172a;text-transform:capitalize;">${s.status.replace('_', ' ')}</strong></div>
+          <div style="font-size:11px;color:#64748b;">Cargo: <strong>${s.cargo_type}</strong> (${s.weight_kg} kg)</div>
+          <div style="font-size:10px;color:#64748b;margin-top:4px;"><strong>From:</strong> ${s.origin_address}</div>
+          <div style="font-size:10px;color:#64748b;"><strong>To:</strong> ${s.dest_address}</div>
+        </div>
+      `;
+
+      // Origin & Dest tiny markers
+      const oMarker = L.circleMarker(oPos, { radius: 5, color, fillColor: '#ffffff', fillOpacity: 1, weight: 2 }).addTo(map).bindPopup(popupHtml);
+      const dMarker = L.circleMarker(dPos, { radius: 5, color, fillColor: color, fillOpacity: 1, weight: 2 }).addTo(map).bindPopup(popupHtml);
+      allRoutesLayersRef.current.push(oMarker, dMarker);
+
+      const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${s.origin_lng},${s.origin_lat};${s.dest_lng},${s.dest_lat}?overview=full&geometries=geojson`;
+
+      fetch(osrmUrl)
+        .then(res => res.json())
+        .then(data => {
+          if (!mapRef.current || !showAllRoutes) return;
+          if (data.routes && data.routes.length > 0) {
+            const route = data.routes[0];
+            const geojsonLayer = L.geoJSON(route.geometry, {
+              style: {
+                color,
+                weight: 4,
+                opacity: 0.8,
+                dashArray: '6, 6',
+              },
+            }).addTo(mapRef.current).bindPopup(popupHtml);
+            allRoutesLayersRef.current.push(geojsonLayer);
+          } else {
+            const line = L.polyline([oPos, dPos], { color, weight: 3, opacity: 0.8, dashArray: '4, 6' })
+              .addTo(mapRef.current)
+              .bindPopup(popupHtml);
+            allRoutesLayersRef.current.push(line);
+          }
+        })
+        .catch(() => {
+          if (!mapRef.current || !showAllRoutes) return;
+          const line = L.polyline([oPos, dPos], { color, weight: 3, opacity: 0.8, dashArray: '4, 6' })
+            .addTo(mapRef.current)
+            .bindPopup(popupHtml);
+          allRoutesLayersRef.current.push(line);
+        });
+    });
+
+    return () => {
+      if (mapRef.current) {
+        allRoutesLayersRef.current.forEach(l => mapRef.current?.removeLayer(l));
+        allRoutesLayersRef.current = [];
+      }
+    };
+  }, [showAllRoutes, shipments]);
+
+  // Handle GPS Trail
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (trailLayerRef.current) {
+      map.removeLayer(trailLayerRef.current);
+      trailLayerRef.current = null;
+    }
+
+    if (!trailActive || !selectedVehicle) return;
+
+    apiGet<Array<{ lat: number; lng: number; speed_kmh: number; timestamp: string }>>(
+      `/api/v1/fleet/vehicles/${selectedVehicle.id}/history?limit=150`
+    )
+      .then(res => {
+        if (!mapRef.current || !trailActive) return;
+        const points = (res.data || []).map(p => [p.lat, p.lng] as L.LatLngTuple);
+        if (points.length > 1) {
+          const polyline = L.polyline(points, {
+            color: '#6366f1',
+            weight: 4,
+            opacity: 0.75,
+            dashArray: '4, 4',
+          }).addTo(mapRef.current);
+          trailLayerRef.current = polyline;
+        }
+      })
+      .catch(e => {
+        console.warn('GPS trail fetch failed', e);
+      });
+
+    return () => {
+      if (mapRef.current && trailLayerRef.current) {
+        mapRef.current.removeLayer(trailLayerRef.current);
+        trailLayerRef.current = null;
+      }
+    };
+  }, [trailActive, selectedVehicle]);
 
   // Handle Geofences
   useEffect(() => {

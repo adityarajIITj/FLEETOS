@@ -515,7 +515,9 @@ export default function CommandCenter() {
                 </button>
                 <button
                   onClick={() => setShowAllRoutes(!showAllRoutes)}
-                  className="flex flex-1 items-center justify-center gap-1.5 border border-white/10 py-2 text-[10px] font-bold text-slate-400 hover:text-white"
+                  className={`flex flex-1 items-center justify-center gap-1.5 border py-2 text-[10px] font-bold transition ${
+                    showAllRoutes ? 'border-cyan-400 bg-cyan-400/10 text-cyan-300' : 'border-white/10 text-slate-400 hover:text-white'
+                  }`}
                 >
                   <Route size={12} /> Routes
                 </button>
@@ -541,6 +543,7 @@ export default function CommandCenter() {
               onSelectVehicle={setSelectedVehicle}
               geofenceActive={geofenceActive}
               showAllRoutes={showAllRoutes}
+              trailActive={trailActive}
             />
 
             {/* Bottom info bar with smooth AnimatePresence inspector */}
