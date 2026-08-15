@@ -124,10 +124,9 @@ router.post('/login', async (req, res) => {
     user.role = 'admin';
   }
 
-  // Strict role validation (admins can access any role workspace)
-  if (user.role !== selectedRole && user.role !== 'admin') {
-    const displayRole = selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1);
-    return res.status(403).json({ success: false, error: { message: `Access Denied: Your account does not have ${displayRole} privileges.` } });
+  // Admin gate: only admins can access administrator role
+  if (selectedRole === 'admin' && user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: { message: 'Access Denied: Administrator privileges required.' } });
   }
 
   // Check account activation
@@ -311,9 +310,9 @@ router.post('/otp/verify', (req, res) => {
     user.role = 'admin';
   }
 
-  if (user.role !== selectedRole && user.role !== 'admin') {
-    const displayRole = selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1);
-    return res.status(403).json({ success: false, error: { message: `Access Denied: Your account does not have ${displayRole} privileges.` } });
+  // Admin gate: only admins can access administrator role
+  if (selectedRole === 'admin' && user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: { message: 'Access Denied: Administrator privileges required.' } });
   }
 
   const token = signToken({ id: user.id, email: user.email, role: user.role });
@@ -440,10 +439,9 @@ router.post('/google', async (req, res) => {
       return res.status(403).json({ success: false, error: { message: 'Your account has been deactivated. Contact your administrator.' } });
     }
 
-    // Admins can log into any role workspace or administrator workspace
-    if (user.role !== selectedRole && user.role !== 'admin') {
-      const displayRole = selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1);
-      return res.status(403).json({ success: false, error: { message: `Access Denied: Your account does not have ${displayRole} privileges.` } });
+    // Admin gate: only admins can access administrator role
+    if (selectedRole === 'admin' && user.role !== 'admin') {
+      return res.status(403).json({ success: false, error: { message: 'Access Denied: Administrator privileges required.' } });
     }
 
     const token = signToken({ id: user.id, email: user.email, role: user.role });
